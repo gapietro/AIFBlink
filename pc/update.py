@@ -52,8 +52,8 @@ SIG_URL = ota.RELEASE_BASE + "manifest.json.sig"
 # accept another update, and there is no way to reach one that will not. Back
 # it up the way MCUboot's key is.
 RELEASE_PUBKEY_PEM = """-----BEGIN PUBLIC KEY-----
-MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEs++ur2jHlamykVsPeCvtT/VE5Awy
-JK1K9T7tpqx6hxXWLKxorhWH6Pkxs8Bd/jzv4Zsk2yTOhaUE+dZmSt24Yw==
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEVCmrS5XXyjK67fRrsOMQKlFRixvt
+ccZpBXFpjgzqyUL3Nn6/qKqU1e6GDeVPGkzVM9FluyMaeJFoAVej39Q+5g==
 -----END PUBLIC KEY-----
 """
 

@@ -8,6 +8,7 @@ resolve to the owner's live install.
 """
 import json
 import os
+import sys
 
 import pytest
 
@@ -35,11 +36,46 @@ def _write(p, events):
     p.write_text(json.dumps(payload), encoding="utf-8")
 
 
+def _ours(event, shim=SHIM):
+    """The command install() writes for `event`, on THIS platform.
+
+    Spelled out as "sh /home/k/... codex" these tests failed every one of
+    their assertions on the Windows runner, where hook_command() writes
+    `bash` and forward slashes on purpose (see its docstring). What they test
+    is the install logic, not the spelling, so they ask for the spelling;
+    the spelling itself is pinned by the two tests that set sys.platform.
+    """
+    return ich.hook_command(shim, event)
+
+
 def test_the_command_carries_the_codex_argument():
     """Without it the shim writes Codex sessions into ~/.blink/state and the
     board reports them as Claude ones."""
     cmd = ich.hook_command(SHIM, "PreToolUse")
     assert cmd.endswith("PreToolUse codex")
+
+
+def test_the_posix_command_is_sh_with_a_quoted_path(monkeypatch):
+    monkeypatch.setattr(sys, "platform", "linux")
+    assert ich.hook_command(SHIM, "PreToolUse") == \
+        "sh /home/k/.blink/blink-hook.sh PreToolUse codex"
+    assert ich.hook_command("/home/k l/.blink/blink-hook.sh", "Stop") == \
+        "sh '/home/k l/.blink/blink-hook.sh' Stop codex"
+
+
+def test_the_windows_command_is_bash_and_ascii(monkeypatch):
+    """The same hand-over to Git Bash as Claude Code's hooks, and the same
+    non-ASCII profile: spelled through $USERPROFILE, which bash expands after
+    the hand-over (tests/pc/test_install_hooks.py has the incident)."""
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(os.path, "expanduser",
+                        lambda p: "C:\\Users\\\u05de\u05e9")
+    cmd = ich.hook_command(
+        "C:\\Users\\\u05de\u05e9\\.blink\\blink-hook.sh", "PreToolUse")
+    assert cmd == 'bash "$USERPROFILE/.blink/blink-hook.sh" PreToolUse codex'
+    assert cmd.isascii()
+    assert ich.hook_command("D:\\tools\\hook.sh", "Stop") == \
+        "bash D:/tools/hook.sh Stop codex"
 
 
 def test_install_writes_one_group_per_event(tmp_path):
@@ -52,7 +88,7 @@ def test_install_writes_one_group_per_event(tmp_path):
     assert group["matcher"] == "*"
     assert group["hooks"] == [{
         "type": "command",
-        "command": "sh /home/k/.blink/blink-hook.sh PreToolUse codex"}]
+        "command": _ours("PreToolUse")}]
     assert "matcher" not in events["Stop"][0], \
         "events that take no matcher must not be given one"
 
@@ -104,7 +140,7 @@ def test_install_repoints_a_moved_shim(tmp_path):
     events = _read(p)
     assert len(events["PreToolUse"]) == 1
     assert events["PreToolUse"][0]["hooks"][0]["command"] == \
-        "sh /new/blink-hook.sh PreToolUse codex"
+        _ours("PreToolUse", "/new/blink-hook.sh")
     assert "repointed" in msg
 
 
@@ -119,7 +155,7 @@ def test_install_never_touches_someone_elses_hook(tmp_path):
     events = _read(p)
     commands = [h["command"] for g in events["PreToolUse"] for h in g["hooks"]]
     assert "/usr/local/bin/audit.sh" in commands
-    assert "sh /home/k/.blink/blink-hook.sh PreToolUse codex" in commands
+    assert _ours("PreToolUse") in commands
 
 
 def test_install_keeps_the_rest_of_the_file(tmp_path):
@@ -142,8 +178,7 @@ def test_install_leaves_a_shared_groups_matcher_alone(tmp_path):
     p = tmp_path / "hooks.json"
     shared = {"matcher": "Bash", "hooks": [
         {"type": "command", "command": "/usr/local/bin/audit.sh"},
-        {"type": "command",
-         "command": "sh /home/k/.blink/blink-hook.sh PreToolUse codex"}]}
+        {"type": "command", "command": _ours("PreToolUse")}]}
     _write(p, {"PreToolUse": [shared]})
 
     ich.install(str(p), SHIM)
@@ -165,7 +200,7 @@ def test_install_steps_over_a_group_it_cannot_read(tmp_path):
     assert "not a group" in events["PreToolUse"]
     commands = [h["command"] for g in events["PreToolUse"]
                 if isinstance(g, dict) for h in g["hooks"]]
-    assert commands == ["sh /home/k/.blink/blink-hook.sh PreToolUse codex"]
+    assert commands == [_ours("PreToolUse")]
 
 
 def test_install_refuses_a_file_it_cannot_parse(tmp_path):
@@ -223,7 +258,7 @@ def test_the_marker_records_what_was_written(tmp_path):
     p = tmp_path / "hooks.json"
     ich.install(str(p), SHIM)
     recorded = ich._read_marker()
-    assert "sh /home/k/.blink/blink-hook.sh Stop codex" in recorded
+    assert _ours("Stop") in recorded
 
 
 def test_a_marker_that_is_not_utf8_is_no_marker(tmp_path):
@@ -462,7 +497,7 @@ def test_a_refusal_keeps_the_marker(tmp_path):
 
     ich.uninstall(str(p), SHIM)
 
-    assert "sh /home/k/.blink/blink-hook.sh Stop codex" in ich._read_marker()
+    assert _ours("Stop") in ich._read_marker()
 
 
 def test_uninstall_refuses_a_file_it_cannot_open(tmp_path):
@@ -563,7 +598,7 @@ def test_a_write_that_failed_keeps_the_marker(tmp_path):
     finally:
         home.chmod(0o700)
 
-    assert "sh /home/k/.blink/blink-hook.sh Stop codex" in ich._read_marker()
+    assert _ours("Stop") in ich._read_marker()
 
 
 @_needs_unprivileged_posix

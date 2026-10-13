@@ -74,7 +74,7 @@ Pillow, so on a machine whose system `python3` lacks them, run it as
 `BLINK_PYTHON=$PWD/.venv-test/bin/python sh tests/ci/check_factory.sh`. The
 other CI scripts have no such dependency.
 
-**1467 passing** as of 2026-10-13. The first five packages are pinned in
+**1482 passing** as of 2026-10-13. The first five packages are pinned in
 `pc/requirements.txt` and are pinned on purpose; `numpy` and `Pillow` are only
 needed by the logo and boot-animation encoder tests. CI runs the same
 `pytest tests/ -q`.

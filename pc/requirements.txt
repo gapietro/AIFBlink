@@ -13,6 +13,16 @@
 # Raising a pin is a deliberate act: re-flash a board with it first.
 pyserial==3.5
 esptool==5.3.1
+# Not imported by anything here -- esptool requires it with no upper bound,
+# which made it the one floating version in the frozen binary. bitstring 5.0.0
+# removed BitStream and made tibs its only backend: espefuse died on import
+# ("cannot import name 'BitStream'"), and in a binary built by
+# tools/build_binary.sh, which excludes tibs by name, bitstring itself no
+# longer imported (2026-10-12, found setting up a new bench Mac). Nothing on
+# today's flash path imports it, so no install broke -- but the build's own
+# assumption (bitarray backend, tibs optional) is a 4.x fact. 4.4.0 is what
+# esptool 5.3.1 flashed and eFuse-probed an unfused CYD with that day.
+bitstring==4.4.0
 # Verifies the release manifest's P-256 signature before this program will
 # replace itself. Pure Python and ~100 KB frozen, where `cryptography` would
 # add tens of megabytes to every platform's download to check one signature a

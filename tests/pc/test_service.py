@@ -760,7 +760,7 @@ class TestLinuxWithoutSystemd:
         r = _runs(monkeypatch)
         msg = cli.backend().install()
         assert "no systemd here" in msg
-        assert cli.installed_bin() in msg          # what to run by hand
+        assert cli.user_command() in msg           # what to run by hand
         assert os.path.exists(cli.unit_path())
         assert r.calls == []                       # nothing was invoked
 

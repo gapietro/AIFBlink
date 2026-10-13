@@ -20,6 +20,7 @@ prompt. A few lines of sh start in single-digit milliseconds.
 import argparse
 import glob
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -156,6 +157,35 @@ def _frozen() -> bool:
 def _self_path() -> str:
     """The binary to copy into place. sys.executable is the frozen binary."""
     return sys.executable if _frozen() else os.path.abspath(sys.argv[0])
+
+
+def _repo_root() -> str:
+    """The checkout a source run lives in: blink_main.py sits next to pc/."""
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def _source_argv() -> list:
+    """How a source checkout runs this program, minus the subcommand."""
+    return [sys.executable, os.path.join(_repo_root(), "blink_main.py")]
+
+
+def user_command() -> str:
+    """What a PERSON types to run this program again, for every "run X" we print.
+
+    installed_bin() is where the frozen binary lives, and it was also printed
+    as the command to type -- which from a source checkout names a file that
+    does not exist. `blink install` run from a checkout copies nothing, yet it
+    told the person to undo it with ~/.blink/bin/blink uninstall (an empty
+    directory) and that the folder it was run from could be deleted, while
+    the service it had just registered runs out of that folder (2026-10-12,
+    found installing on the bench Mac). installed_bin() stays what it is --
+    process matching and the updater need the path -- and this is the string.
+    """
+    if _frozen():
+        return installed_bin()
+    if sys.platform == "win32":
+        return subprocess.list2cmdline(_source_argv())
+    return " ".join(shlex.quote(a) for a in _source_argv())
 
 
 def _shim_source(name: str = "blink-statusline.sh") -> str:
@@ -575,8 +605,7 @@ def _service_command():
     """
     if _frozen():
         return [installed_bin(), "run"]
-    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    return [sys.executable, os.path.join(repo, "blink_main.py"), "run"]
+    return _source_argv() + ["run"]
 
 
 def _confirm_running(probe, tries=4) -> bool:
@@ -643,7 +672,7 @@ class _Backend:
 
     def install(self) -> str:
         return (f"not supported on {sys.platform}; run it yourself: "
-                f"{installed_bin()} run")
+                f"{user_command()} run")
 
     def restart(self) -> str:
         return "not running under a supervisor; restart it yourself"
@@ -941,7 +970,7 @@ class _LaunchdBackend(_Backend):
             # burning a board, and then asking.
             if os.path.exists(plist_path()):
                 return ("installed but not loaded -- run "
-                        f"`{installed_bin()} install` to start it")
+                        f"`{user_command()} install` to start it")
             return "not installed"
 
         fields = {}
@@ -1320,7 +1349,7 @@ class _SystemdBackend(_Backend):
         with open(unit_path(), "w", encoding="utf-8") as f:
             f.write(_UNIT_TEMPLATE.format(command=_systemd_exec()))
         if not self._has_systemctl():
-            return f"no systemd here; run it yourself: {installed_bin()} run"
+            return f"no systemd here; run it yourself: {user_command()} run"
         subprocess.run(["systemctl", "--user", "daemon-reload"], capture_output=True, **update.ota.NO_WINDOW)
         r = subprocess.run(["systemctl", "--user", "enable", "--now",
                             "blink-bridge.service"], capture_output=True, **update.ota.NO_WINDOW)
@@ -1703,9 +1732,14 @@ def _announce():
     """
     print("Blink setup. Here is everything it is about to do, before it does any of it.")
     print()
-    print(f"  Creates    {installed_bin()}")
-    print("             a copy of this program and its support files, so the")
-    print("             folder you downloaded can be deleted when this finishes.")
+    if _frozen():
+        print(f"  Creates    {installed_bin()}")
+        print("             a copy of this program and its support files, so the")
+        print("             folder you downloaded can be deleted when this finishes.")
+    else:
+        print(f"  Uses       {_repo_root()}")
+        print("             in place: running from a source checkout copies")
+        print("             nothing, so the service runs from this folder. Keep it.")
     print(f"  Creates    {shim_path()}")
     print("             the small script Claude Code runs to hand over the")
     print("             usage figures. It keeps the last status line payload")
@@ -1755,7 +1789,7 @@ def _announce():
     print("  worked them out. From the Codex log it keeps only the rate-limit")
     print("  line, never the conversation.")
     print()
-    print(f"  To undo all of it:  {installed_bin()} uninstall")
+    print(f"  To undo all of it:  {user_command()} uninstall")
     print()
 
 
@@ -1838,7 +1872,7 @@ def cmd_driver(_args) -> int:
         if undriven:
             print()
             print("The board is set up. Check it with:")
-            print(f"  {installed_bin()} status")
+            print(f"  {user_command()} status")
         return 0
 
     # Installed, or claimed to be, and Windows still will not use the device.
@@ -1924,7 +1958,7 @@ def cmd_install(_args) -> int:
             pass          # absent (state/ appears on the first hook), or Windows
     _write_shim(shim_path(), "blink-statusline.sh")
     install_statusline._announce(settings_path(), shim_path(),
-                                 undo_hint=f"{installed_bin()} uninstall")
+                                 undo_hint=f"{user_command()} uninstall")
     print("      " + install_statusline.install(settings_path(), shim_path()))
 
     step("Activity hooks")
@@ -1960,10 +1994,13 @@ def cmd_install(_args) -> int:
     print()
     print("Done. Plug the board in over USB -- it picks it up on its own.")
     print(f"  Log:     {log_path()}")
-    print(f"  Check:   {installed_bin()} status")
-    print(f"  Undo:    {installed_bin()} uninstall")
+    print(f"  Check:   {user_command()} status")
+    print(f"  Undo:    {user_command()} uninstall")
     print()
-    print("  You can delete the folder you downloaded.")
+    if _frozen():
+        print("  You can delete the folder you downloaded.")
+    else:
+        print(f"  Keep {_repo_root()} -- the service runs from it.")
     # Absent first: it is a bigger fact than out-of-date, and the two are
     # mutually exclusive (claude_version() gives no version for an absent
     # install, which is exactly what _warn_if_claude_too_old returns on).
@@ -2220,7 +2257,7 @@ def _shim_repair_line(note: str, bridge_running: bool) -> str:
     """Format a stale-shim note, promising repair only when it will happen."""
     if _shim_repair_is_live(bridge_running):
         return f"{note} -- the daemon replaces it within five minutes of starting"
-    return f"{note} -- run `{installed_bin()} install` to fix it"
+    return f"{note} -- run `{user_command()} install` to fix it"
 
 
 def cmd_status(args) -> int:
@@ -2312,7 +2349,7 @@ def cmd_status(args) -> int:
             print(f"Activity    hooks installed ({ours}/{total} events{note})")
         elif ours:
             print(f"Activity    PARTIAL -- {ours}/{total} hooks present;"
-                  f" run `{installed_bin()} install` to restore them")
+                  f" run `{user_command()} install` to restore them")
         else:
             print("Activity    hooks not installed -- the busy/idle pip will"
                   " stay dark")
@@ -2504,7 +2541,7 @@ def _codex_hook_status():
     free to drift from the first.
     """
     if not install_codex_hooks._read_marker():
-        return [f"Codex hook  not installed -- run `{installed_bin()} install`"
+        return [f"Codex hook  not installed -- run `{user_command()} install`"
                 " on a machine with Codex"]
     try:
         # sweep=False, for the reason codex_state.scan gives at length: a
@@ -2645,7 +2682,7 @@ def cmd_update(_args) -> int:
         print()
         print("The new version is installed, but the background service is")
         print("not running, so the board will stay on \"Link the PC daemon\".")
-        print(f"Run `{installed_bin()} install` to finish.")
+        print(f"Run `{user_command()} install` to finish.")
         return 1
     return 0
 

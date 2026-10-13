@@ -100,6 +100,34 @@ def test_install_discloses_before_it_writes(tmp_path, capsys):
     assert rest, "the disclosure must come before the work"
 
 
+def test_the_command_to_type_is_the_binary_once_frozen(monkeypatch):
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    assert cli.user_command() == cli.installed_bin()
+
+
+def test_a_checkout_names_itself_as_the_command_to_type(monkeypatch):
+    """~/.blink/bin is empty after a source install, so naming it was an
+    undo command that could not run (2026-10-12)."""
+    monkeypatch.delattr(sys, "frozen", raising=False)
+    monkeypatch.setattr(sys, "platform", "darwin")
+    cmd = cli.user_command()
+    assert cmd.endswith("blink_main.py")
+    assert sys.executable in cmd
+    assert cli.installed_bin() not in cmd
+
+
+def test_a_checkout_install_says_keep_the_folder(tmp_path, capsys, monkeypatch):
+    """The service runs out of the checkout; "you can delete the folder you
+    downloaded" would have told someone to delete the program itself."""
+    monkeypatch.delattr(sys, "frozen", raising=False)
+    cli.main(["install"])
+    out = capsys.readouterr().out
+    assert "delete the folder" not in out
+    assert f"Keep {cli._repo_root()}" in out
+    assert f"{cli.user_command()} uninstall" in out
+    assert f"{cli.installed_bin()} uninstall" not in out
+
+
 def test_the_disclosure_names_every_file_install_writes(tmp_path, capsys):
     """It asks nothing, so a disclosure that is merely MOSTLY right is worse
     than none -- it is the thing people rely on instead of reading the diff.

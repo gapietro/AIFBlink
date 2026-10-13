@@ -64,8 +64,8 @@ production caller at all — only tests exercised it.
 ```sh
 python3 -m venv .venv-test          # 3.11+; a bare `python` may not exist
 .venv-test/bin/python -m pip install \
-    pyserial==3.5 esptool==5.3.1 ecdsa==0.19.1 certifi==2026.7.22 \
-    pytest numpy Pillow
+    pyserial==3.5 esptool==5.3.1 bitstring==4.4.0 ecdsa==0.19.1 \
+    certifi==2026.7.22 pytest numpy Pillow
 .venv-test/bin/python -m pytest tests/ -q
 ```
 
@@ -74,7 +74,7 @@ Pillow, so on a machine whose system `python3` lacks them, run it as
 `BLINK_PYTHON=$PWD/.venv-test/bin/python sh tests/ci/check_factory.sh`. The
 other CI scripts have no such dependency.
 
-**1459 passing** as of 2026-09-10. The first four packages are pinned in
+**1467 passing** as of 2026-10-13. The first five packages are pinned in
 `pc/requirements.txt` and are pinned on purpose; `numpy` and `Pillow` are only
 needed by the logo and boot-animation encoder tests. CI runs the same
 `pytest tests/ -q`.
@@ -138,7 +138,8 @@ how it was found. No trailers (see the top of this file).
 - `docs/README-full.md` — the long user-facing document, including build and
   flash.
 - `docs/windows-check.md` — the ten-minute manual pass, once per release.
-- `docs/fleet-testing.md` and `tools/fleet/fleet.toml` — the three desks a
-  release is proved on.
+- `docs/fleet-testing.md` and `tools/fleet/fleet.toml` — the desks a release
+  is proved on. This fork has one (this Mac, a Claude board); the doc still
+  describes upstream's three, which this fork cannot reach.
 - `docs/open-bugs/` — open faults with what has been measured, so nobody
   re-derives it.

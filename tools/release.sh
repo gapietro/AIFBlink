@@ -11,8 +11,15 @@ TAG="v$(sed -n 's/#define BLINK_FW_VERSION "\(.*\)"/\1/p' "$ROOT/firmware/src/ve
 
 VER="${TAG#v}"
 [ -n "$VER" ] || { echo "FATAL: no version in version.h"; exit 1; }
+# Every Python step below -- the fleet gate, the manifest, the signature check
+# -- runs under this one interpreter. It needs 3.11+ (tomllib, for the gate)
+# and ecdsa (pc/update.py verifies with it). Plain `python3` on a stock Mac is
+# Apple's 3.9 with neither, and the bench Mac of 2026-10-13 had nothing else
+# on PATH, so the gate refused before it had read a single result.
+# BLINK_PYTHON names a better one, the same override burn.sh takes.
+PY="${BLINK_PYTHON:-python3}"
 # A release nobody put on a board is a guess. tools/fleet/run.py drives a real
-# board on all three desks and writes .fleet/last_run.json; pc/fleet_gate.py
+# board on every desk and writes .fleet/last_run.json; pc/fleet_gate.py
 # re-reads that file here and insists on all six of: green, for THIS commit,
 # finished within twelve hours, not narrowed by --only, not narrowed by
 # --scenarios, and one clean pass from every desk in tools/fleet/fleet.toml.
@@ -24,8 +31,8 @@ VER="${TAG#v}"
 # vouch for its own completeness.
 #
 # It refuses whenever it cannot check: no file, an unreadable one, a missing
-# inventory, or a python3 too old for tomllib (/usr/bin/python3 is still 3.9
-# on macOS, and this script calls plain `python3`). Silence from a gate must
+# inventory, or an interpreter too old for tomllib (/usr/bin/python3 is still
+# 3.9 on macOS -- see $PY above). Silence from a gate must
 # never read as approval.
 #
 # PYTHONPATH because -m adds the CALLER's directory to sys.path, not this
@@ -34,12 +41,12 @@ if [ "${BLINK_SKIP_FLEET:-}" = "1" ]; then
 	echo "WARNING: BLINK_SKIP_FLEET=1 -- $TAG is being built with no proof" >&2
 	echo "         that it runs on any board. Nothing below checks that." >&2
 else
-	PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}" python3 -m pc.fleet_gate \
+	PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}" "$PY" -m pc.fleet_gate \
 		"$ROOT/.fleet/last_run.json" "$(git -C "$ROOT" rev-parse HEAD)" \
 		"$ROOT/tools/fleet/fleet.toml" || {
 		echo "FATAL: the fleet gate refused $TAG for the reason above." >&2
-		echo "       Prove this commit on all three desks first:" >&2
-		echo "         python3 tools/fleet/run.py" >&2
+		echo "       Prove this commit on every desk in fleet.toml first:" >&2
+		echo "         $PY tools/fleet/run.py" >&2
 		echo "       BLINK_SKIP_FLEET=1 releases without it." >&2
 		exit 1; }
 fi
@@ -246,7 +253,7 @@ done
 # It used to be a second definition inline here, free to drift from the one the
 # daemon reads.
 ROOT="$ROOT" VER="$VER" PROTO="$PROTO" SIZE="$SIZE" SHA="$SHA" TMP="$TMP" \
-	ARTIFACTS="$ARTIFACTS" python3 - <<'PYEOF' > "$TMP/manifest.json"
+	ARTIFACTS="$ARTIFACTS" "$PY" - <<'PYEOF' > "$TMP/manifest.json"
 import hashlib, json, os, sys
 
 sys.path.insert(0, os.environ["ROOT"])
@@ -275,7 +282,7 @@ openssl dgst -sha256 -sign "$RELKEY" -out "$TMP/manifest.json.sig" \
 	"$TMP/manifest.json"
 # Prove the signature verifies with the public half that is compiled into the
 # binaries we just built, before anyone can download it.
-python3 - "$ROOT" "$TMP/manifest.json" "$TMP/manifest.json.sig" <<'PYEOF'
+"$PY" - "$ROOT" "$TMP/manifest.json" "$TMP/manifest.json.sig" <<'PYEOF'
 import sys
 # Explicit root: the firmware build left us in a different directory, and
 # picking pc/ up from the cwd would work here and nowhere else.

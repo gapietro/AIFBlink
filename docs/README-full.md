@@ -190,7 +190,7 @@ nothing to keep installed.
 
 ```bash
 # macOS (Apple silicon)
-curl -fsSL https://github.com/KfirLevy258/Blink/releases/latest/download/blink-macos-arm64.tar.gz | tar xz && ./blink/blink
+curl -fsSL https://github.com/gapietro/AIFBlink/releases/latest/download/blink-macos-arm64.tar.gz | tar xz && ./blink/blink
 # macOS (Intel):  .../blink-macos-x86_64.tar.gz
 # Linux:          .../blink-linux-x86_64.tar.gz
 

@@ -135,7 +135,9 @@ tools/release.sh
 
 `release.sh` builds from the committed tree (it refuses a dirty tree or a reused
 version), signs the image, and attaches `blink-fw.bin` + `manifest.json` to the
-`v<version>` release on **`KfirLevy258/Blink`** - which is the feed every board reads.
+`v<version>` release on **`gapietro/AIFBlink`** - which is the feed every board
+flashed from this fork reads. (Upstream's boards read `KfirLevy258/Blink`, and
+verify against a key this fork does not have.)
 
 On the device there are two ways in, and it picks by itself:
 

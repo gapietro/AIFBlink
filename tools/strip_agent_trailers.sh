@@ -6,7 +6,8 @@
 # .githooks/commit-msg strips `Co-Authored-By: Claude` and `Claude-Session:`
 # from every NEW commit. It cannot touch commits made before it was installed,
 # or made in a clone that never ran `git config core.hooksPath .githooks`, and
-# this repository is published at github.com/KfirLevy258/Blink. The last time
+# this repository is public (github.com/gapietro/AIFBlink, a fork of
+# github.com/KfirLevy258/Blink). The last time
 # such commits reached a release it took a history rewrite to undo, in a hurry.
 #
 # This does that rewrite deliberately, before the push rather than after:

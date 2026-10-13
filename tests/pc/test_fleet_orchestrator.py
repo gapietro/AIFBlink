@@ -660,16 +660,18 @@ def _inventory(tmp_path):
     return path
 
 
-def test_the_shipped_inventory_holds_the_three_measured_desks():
+def test_the_shipped_inventory_holds_this_forks_one_measured_desk():
+    # Upstream's three desks were reached over ssh from its own Mac; none of
+    # them is reachable from this fork, and the release gate demands a pass
+    # from every desk listed, so they had to go (tools/fleet/fleet.toml).
     hosts = fleet_run.load_inventory(fleet_run.DEFAULT_INVENTORY)
-    assert set(hosts) == {"local-mac", "kfir-ubuntu", "galit-win10"}
+    assert set(hosts) == {"local-mac"}
     assert hosts["local-mac"]["ssh"] == ""
-    assert hosts["kfir-ubuntu"]["ssh"] == "kfir@kfir-macbook"
-    assert hosts["galit-win10"]["os"] == "windows"
-    # Every python named has to be one with pyserial on that machine: the
+    assert hosts["local-mac"]["os"] == "darwin"
+    assert hosts["local-mac"]["board"] == "claude"
+    # The python named has to be one with pyserial on that machine: the
     # agent spawns the daemon, which imports serial at module scope.
     assert hosts["local-mac"]["python"].endswith(".venv-test/bin/python")
-    assert hosts["galit-win10"]["python"] == "python"
 
 
 def test_the_inventory_names_no_serial_port():
@@ -680,7 +682,7 @@ def test_the_inventory_names_no_serial_port():
     """
     hosts = fleet_run.load_inventory(fleet_run.DEFAULT_INVENTORY)
     assert not any("port" in cfg for cfg in hosts.values())
-    argv = fleet_run.agent_argv(hosts["galit-win10"])
+    argv = fleet_run.agent_argv(hosts["local-mac"])
     assert "--port" not in argv
 
 

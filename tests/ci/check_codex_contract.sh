@@ -166,8 +166,19 @@ grep -A20 'pub struct SessionMeta' "$FILE" | grep -q 'pub cwd: PathBuf' ||
 	fail "SessionMeta no longer carries cwd -- Codex sessions cannot be named"
 ok "session_meta still carries cwd"
 
+# Two spellings of the same promise. persisted_rollout_item() used to return a
+# bool (`SessionMeta(_) => true`); by rust-v0.162.1 it returns
+# Option<Cow<RolloutItem>>, and SessionMeta is the last alternative of an arm
+# that returns `Some(Cow::Borrowed(item))` whatever the history mode. Only the
+# old spelling was accepted here, so this check failed on 2026-10-13 against a
+# Codex that still wrote session_meta to every rollout.
+#
+# Both forms demand the `=>` straight after the pattern: a guard (`if ...`) or
+# a body that consults history_mode would put something between them, and
+# either one fails closed -- so does a reorder that moves SessionMeta off the
+# arm's last line, which is a reason to read policy.rs, not to guess.
 POLICY=$(fetch codex-rs/rollout/src/policy.rs)
-grep -q 'RolloutItem::SessionMeta(_) => true' "$POLICY" ||
+grep -Eq 'RolloutItem::SessionMeta\(_\) => (true|Some\(Cow::Borrowed\(item\)\)),?$' "$POLICY" ||
 	fail "session_meta is no longer persisted unconditionally"
 ok "session_meta is still written to every rollout"
 

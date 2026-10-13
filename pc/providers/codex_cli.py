@@ -94,7 +94,10 @@ def sessions_root() -> str:
     an ordinary state, handled by the reader rather than by pretending we do
     not know where to look. CODEX_HOME is honoured because Codex itself does.
     """
-    home = os.environ.get("CODEX_HOME") or os.path.expanduser("~/.codex")
+    # Spelled exactly as install_codex_hooks.codex_home(), whose docstring
+    # says why it is joined rather than written "~/.codex".
+    home = (os.environ.get("CODEX_HOME")
+            or os.path.expanduser(os.path.join("~", ".codex")))
     return os.path.join(home, "sessions")
 
 

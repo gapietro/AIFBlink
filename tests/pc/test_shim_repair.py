@@ -42,6 +42,18 @@ def test_a_missing_shim_is_not_current(tmp_path):
     assert cli.shim_is_current(p, "blink-hook.sh") is False
 
 
+# chmod 0o000 is not a way to make a file unreadable everywhere. On Windows it
+# only sets the read-only attribute and the file reads as before, so this test
+# failed there and only there (installer run 38416210121, 2026-10-13); as root
+# the bits deny nothing at all. Same condition test_install_codex_hooks.py
+# already skips on.
+_needs_unprivileged_posix = pytest.mark.skipif(
+    os.name == "nt" or os.geteuid() == 0,
+    reason="permission bits do not deny root, and do not deny reads at all"
+           " on Windows")
+
+
+@_needs_unprivileged_posix
 def test_an_unreadable_shim_is_not_current(tmp_path):
     """Answer the question rather than raising it.
 
@@ -56,6 +68,16 @@ def test_an_unreadable_shim_is_not_current(tmp_path):
         assert cli.shim_is_current(p, "blink-hook.sh") is False
     finally:
         os.chmod(p, 0o644)
+
+
+def test_a_shim_that_cannot_be_opened_is_not_current(tmp_path):
+    """The same promise where the permission test cannot run: a directory
+    where the shim should be fails open() with a real OSError on every
+    platform and for every user (IsADirectoryError on POSIX, PermissionError
+    on Windows)."""
+    p = tmp_path / "blink-hook.sh"
+    p.mkdir()
+    assert cli.shim_is_current(str(p), "blink-hook.sh") is False
 
 
 def test_line_endings_alone_make_a_shim_stale(tmp_path):

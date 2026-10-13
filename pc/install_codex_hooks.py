@@ -100,8 +100,14 @@ def codex_home() -> str:
     redirects it would register a hook nothing ever reads -- and because a
     distrusted or unread hook produces no output at all, the symptom would be
     a board that simply never mentions Codex.
+
+    Joined, not spelled "~/.codex": on Windows expanduser keeps the slash, so
+    `blink uninstall` told people to edit C:\\Users\\<name>/.codex\\config.toml
+    -- found by the Windows runner, whose test compares the printed path with
+    the real one (installer run 38416210121, 2026-10-13).
     """
-    return os.environ.get("CODEX_HOME") or os.path.expanduser("~/.codex")
+    return (os.environ.get("CODEX_HOME")
+            or os.path.expanduser(os.path.join("~", ".codex")))
 
 
 def hooks_file() -> str:

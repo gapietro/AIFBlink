@@ -77,6 +77,17 @@ efuse_probe() {
 		return 0
 	fi
 
+	# Does the TOOL run, before asking whether the PORT is free. Every failure
+	# of the summary below used to read "is the port free?", and on 2026-10-12
+	# the port was free: bitstring 5.0.0 had dropped BitStream, so espefuse died
+	# on import and the board was blamed. --help imports everything summary
+	# does and touches no port. Its output is not echoed -- the reason names the
+	# command instead, so this line can never carry a serial byte.
+	"$etools/espefuse.py" --help >/dev/null 2>&1 || {
+		EFUSE_REASON="espefuse.py in $etools does not start, so the port was never tried. Run '$etools/espefuse.py --help' to see why; pc/requirements.txt pins what it needs."
+		return 0
+	}
+
 	# Assign separately from `local` so the exit status is the command's, not
 	# local's (which is always 0 and would swallow the failure).
 	summary="$("$etools/espefuse.py" --port "$port" summary 2>&1)" || {

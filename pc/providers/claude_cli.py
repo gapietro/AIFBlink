@@ -45,7 +45,7 @@ SRC_ID = ss.SRC_ID
 
 class ClaudeCliProvider(base.ProviderParser):
     def __init__(self, path=None):
-        self._path = path if path is not None else ss.PAYLOAD_PATH
+        self._path = path if path is not None else ss.payload_path()
         # (payload, mtime) for the last reading that had a five-hour
         # percentage, or None before the first one. See the module docstring.
         self._remembered = None

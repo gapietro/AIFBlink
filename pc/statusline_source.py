@@ -20,7 +20,21 @@ from pc.providers import base
 PROVIDER_ID = "claude"
 SRC_ID = "cli"
 
-PAYLOAD_PATH = os.path.expanduser("~/.blink/statusline.json")
+
+def payload_path() -> str:
+    """Where the statusline shim leaves Claude Code's payload.
+
+    A function, not the module constant it used to be. A constant computed
+    with expanduser at import is evaluated before tests/conftest.py can
+    redirect HOME, so it named the REAL ~/.blink/statusline.json in every
+    test process -- the one hole CLAUDE.md warns about, and the file holds
+    live usage on any desk with Blink installed (found 2026-10-13, on a desk
+    that had just installed it). Default arguments are evaluated at import
+    too, so the readers below default to None and ask here instead.
+    """
+    return os.path.join(os.path.expanduser("~"), ".blink", "statusline.json")
+
+
 # How old the payload may get before we stop vouching for it.
 #
 # This was 120 s, and 120 s was wrong in kind, not just in value. Claude Code
@@ -191,8 +205,10 @@ def map_statusline(payload: dict, now_epoch: float, mtime_epoch: float) -> dict:
         map_statusline_frame(payload, now_epoch, mtime_epoch), now_epoch)
 
 
-def read_payload(path: str = PAYLOAD_PATH):
+def read_payload(path: str = None):
     """(payload, mtime) or (None, None) when absent/unreadable/malformed."""
+    if path is None:
+        path = payload_path()
     try:
         mtime = os.path.getmtime(path)
         # UTF-8 by name. Without it Windows opens the file in the machine's
@@ -207,8 +223,11 @@ def read_payload(path: str = PAYLOAD_PATH):
         return None, None
 
 
-def make_fetch(path: str = PAYLOAD_PATH):
+def make_fetch(path: str = None):
     """Zero-arg callable for Bridge(fetch_usage=...). None when no data yet."""
+    if path is None:
+        path = payload_path()
+
     def fetch():
         payload, mtime = read_payload(path)
         if payload is None:

@@ -286,3 +286,26 @@ def test_a_payload_of_the_wrong_shape_is_silence_not_an_exception():
             else ss.map_statusline({"payload": bad}, now, now)
         assert msg["session_pct"] == -1.0, bad
         assert msg["weekly_pct"] == -1.0, bad
+
+
+def test_the_payload_path_follows_home_at_call_time(tmp_path, monkeypatch):
+    """It used to be a module constant resolved at import, before
+    tests/conftest.py could move HOME, so every default read in a test process
+    went to the real ~/.blink/statusline.json."""
+    import os
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    want = os.path.join(str(tmp_path), ".blink", "statusline.json")
+    assert ss.payload_path() == want
+
+
+def test_the_default_readers_never_reach_the_real_home(tmp_path, monkeypatch):
+    """With HOME moved, the no-argument forms see only the moved home."""
+    import os
+    from pc.providers import claude_cli
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    assert ss.read_payload() == (None, None)
+    assert ss.make_fetch()() is None
+    assert claude_cli.ClaudeCliProvider()._path == \
+        os.path.join(str(tmp_path), ".blink", "statusline.json")

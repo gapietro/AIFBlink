@@ -24,6 +24,13 @@
 # that a directory of that name exists. A half-finished checkout should read as
 # absent here, not as a workspace that then fails deep inside a build.
 blink_zephyr_ws() {
+	# zsh, the macOS login shell, aborts the whole command on a glob that
+	# matches nothing -- "no matches found: ~/zephyr-v*" -- so the documented
+	# `. tools/lib_zephyr.sh && blink_zephyr_activate` died on any Mac with
+	# just one of the four candidates (2026-10-12). nullglob drops an
+	# unmatched pattern instead, and localoptions undoes it when this returns.
+	# sh and bash never run the line.
+	[ -n "${ZSH_VERSION:-}" ] && setopt localoptions nullglob
 	if [ -n "${BLINK_ZEPHYR:-}" ]; then
 		[ -f "$BLINK_ZEPHYR/.venv/bin/activate" ] || return 1
 		printf '%s\n' "$BLINK_ZEPHYR"
@@ -66,4 +73,16 @@ blink_zephyr_activate() {
 	# change buried in a refactor.
 	# shellcheck disable=SC1090
 	. "$_bz_ws/zephyr/zephyr-env.sh" >/dev/null 2>&1 || true
+	# The ESP32 image step runs a bare `esptool elf2image`, and Zephyr's own
+	# requirements do not install it. A workspace without it configures, then
+	# compiles for two minutes, then stops with "esptool: command not found"
+	# (release.sh, 2026-10-13: burn.sh had passed only because the caller's
+	# PATH happened to carry another venv). Say so before the build starts.
+	command -v esptool >/dev/null 2>&1 || {
+		echo "FATAL: esptool is not on PATH, and the ESP32 build needs it." >&2
+		echo "       Install the pinned one into the workspace venv:" >&2
+		echo "         $_bz_ws/.venv/bin/pip install esptool==5.3.1 bitstring==4.4.0" >&2
+		echo "       (the versions pc/requirements.txt pins)." >&2
+		return 1
+	}
 }

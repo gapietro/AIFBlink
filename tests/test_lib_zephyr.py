@@ -61,6 +61,8 @@ def test_zsh_globbing_is_left_as_it_was(tmp_path):
     assert r.stdout.strip() == "off"
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Git Bash's sh prints /c/... for"
+                                         " C:\\..., so the path cannot match")
 def test_sh_still_finds_the_workspace(tmp_path):
     ws = _workspace(tmp_path)
     r = _run("sh", "blink_zephyr_ws", tmp_path)

@@ -109,9 +109,11 @@ def test_a_checkout_names_itself_as_the_command_to_type(monkeypatch):
     """~/.blink/bin is empty after a source install, so naming it was an
     undo command that could not run (2026-10-12)."""
     monkeypatch.delattr(sys, "frozen", raising=False)
-    monkeypatch.setattr(sys, "platform", "darwin")
+    # The real platform, not a forced one: forcing darwin on the Windows
+    # runner quoted C:\ paths the POSIX way and the check failed on the quote
+    # (installer run 38422467287). Containment survives either quoting.
     cmd = cli.user_command()
-    assert cmd.endswith("blink_main.py")
+    assert os.path.join(cli._repo_root(), "blink_main.py") in cmd
     assert sys.executable in cmd
     assert cli.installed_bin() not in cmd
 

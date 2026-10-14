@@ -15,7 +15,6 @@
 #include "usage_view.h"
 #include "cfg_store.h"
 #include "backlight.h"
-#include "panel_tune.h"
 #include "net_wifi.h"
 #include "net_time.h"
 #include "portal.h"
@@ -1765,7 +1764,6 @@ int main(void)
 	 * block for seconds against a 30 s window. */
 	ui_boot_set_pump(ota_boot_pump);
 	backlight_init();	/* drive the PWM to the persisted level */
-	panel_contrast_init();	/* after the driver init and the MADCTL fix */
 #if IS_ENABLED(CONFIG_BLINK_WIFI_MODE)
 	net_wifi_init();
 	net_wifi_set_idle_hook(wifi_idle);

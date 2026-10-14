@@ -30,7 +30,6 @@ target_sources(app PRIVATE
 	src/ui_slide.c
 	src/ui_swipe.c
 	src/backlight.c
-	src/panel_tune.c
 	src/ota_parse.c
 	src/ota.c
 	src/ui_touchfx.c

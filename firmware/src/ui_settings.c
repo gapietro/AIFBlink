@@ -36,7 +36,6 @@
 #include "upd_prompt.h"
 #include "upd_row.h"
 #include "usage_view.h"
-#include "panel_tune.h"
 
 /*
  * The AI Foundry palette (2026-10-14), taken from the AIF logo itself: its
@@ -286,47 +285,25 @@ static lv_obj_t *pct_lbl;	/* the brightness row's subtitle: "60%" */
  * sources. That is a HOST-side meaning, and it is not something to settle from
  * across the room with a fingertip.
  */
-static lv_obj_t *bright_big;	/* the brightness readout on the Display screen */
-static lv_obj_t *bright_ov;	/* the Display screen itself, or NULL */
+static lv_obj_t *bright_big;	/* the big readout on the brightness screen */
+static lv_obj_t *bright_ov;	/* the brightness screen itself, or NULL */
 static lv_obj_t *seg[BRIGHT_STOPS];
-/* The contrast half of the Display screen -- see panel_tune.c. */
-static lv_obj_t *con_lbl;
-static lv_obj_t *con_btn[PANEL_CONTRAST_LEVELS];
-static lv_obj_t *con_txt[PANEL_CONTRAST_LEVELS];
 
 static void bright_refresh(void)
 {
 	uint8_t p = backlight_get();
-	uint8_t c = panel_contrast_get();
-	char b[40];
+	char b[8];
 
+	snprintf(b, sizeof(b), "%d%%", p);
 	/* Every one of these is optional: the row exists only while the panel
-	 * is open, and the readout and stops only while the Display screen
+	 * is open, and the readout and stops only while the brightness screen
 	 * is. Writing through a pointer whose object has been deleted is the
 	 * NULL-deref this file has already been bitten by once. */
 	if (pct_lbl) {
-		snprintf(b, sizeof(b), "%d%%  |  Contrast: %s", p,
-			 panel_contrast_name(c));
 		lv_label_set_text(pct_lbl, b);
 	}
 	if (bright_big) {
-		snprintf(b, sizeof(b), "Brightness %d%%", p);
 		lv_label_set_text(bright_big, b);
-	}
-	if (con_lbl) {
-		snprintf(b, sizeof(b), "Contrast: %s", panel_contrast_name(c));
-		lv_label_set_text(con_lbl, b);
-	}
-	/* The chosen level is the lit one, as with the brightness stops: the
-	 * setting reads as a shape before it reads as a word. */
-	for (int i = 0; i < PANEL_CONTRAST_LEVELS; i++) {
-		if (con_btn[i] == NULL) {
-			continue;
-		}
-		lv_obj_set_style_bg_color(con_btn[i],
-					  i == c ? COL_TEXT : COL_PANEL, 0);
-		lv_obj_set_style_text_color(con_txt[i],
-					    i == c ? COL_BG : COL_TEXT, 0);
 	}
 	for (int i = 0; i < BRIGHT_STOPS; i++) {
 		uint8_t lvl = 20 + i * 20;
@@ -1647,13 +1624,8 @@ static void bright_close(void)
 	/* Forget the children BEFORE deleting the parent: bright_refresh() can
 	 * be called from a step at any time and writes through both. */
 	bright_big = NULL;
-	con_lbl = NULL;
 	for (int i = 0; i < BRIGHT_STOPS; i++) {
 		seg[i] = NULL;
-	}
-	for (int i = 0; i < PANEL_CONTRAST_LEVELS; i++) {
-		con_btn[i] = NULL;
-		con_txt[i] = NULL;
 	}
 	lv_obj_del(bright_ov);
 	bright_ov = NULL;
@@ -1684,22 +1656,6 @@ static void bright_stop_cb(lv_event_t *e)
 	bright_refresh();
 }
 
-static void contrast_cb(lv_event_t *e)
-{
-	panel_contrast_set((uint8_t)(intptr_t)lv_event_get_user_data(e));
-	bright_refresh();
-}
-
-/*
- * The Display screen: brightness above, contrast below.
- *
- * It was the Brightness screen, with five stops 116 px tall. Contrast joined
- * it rather than getting a row of its own because the settings list has room
- * for exactly two rows at a pressable height (see ROW_H) -- and because the
- * two are one question to the person asking it: "can I see this screen".
- * The stops gave up height, not width: 56 x 64 is 10.0 x 11.4 mm, still over
- * a fingertip, and the contrast buttons are 92 x 56, 16.4 x 10.0 mm.
- */
 static void show_bright(lv_event_t *e)
 {
 	ARG_UNUSED(e);
@@ -1722,7 +1678,7 @@ static void show_bright(lv_event_t *e)
 
 	lv_obj_t *title = lv_label_create(bright_ov);
 
-	lv_label_set_text(title, "Display");
+	lv_label_set_text(title, "Brightness");
 	lv_obj_set_style_text_font(title, &lv_font_montserrat_16, 0);
 	lv_obj_set_style_text_color(title, COL_TEXT, 0);
 	lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 10);
@@ -1730,18 +1686,19 @@ static void show_bright(lv_event_t *e)
 	mk_line(bright_ov, 40);
 
 	bright_big = lv_label_create(bright_ov);
+	lv_obj_set_style_text_font(bright_big, &lv_font_montserrat_20, 0);
 	lv_obj_set_style_text_color(bright_big, COL_TEXT, 0);
-	lv_obj_align(bright_big, LV_ALIGN_TOP_MID, 0, 46);
+	lv_obj_align(bright_big, LV_ALIGN_TOP_MID, 0, 50);
 
-	/* Five stops, 56 x 64 -- 10.0 x 11.4 mm. Still the largest targets on
-	 * the screen, because brightness is the one control that gets used
-	 * while the panel is too dim to read. */
+	/* Five stops, 56 x 116 -- 10.0 x 20.6 mm. The whole screen is spent on
+	 * them because this is the one control that gets used while the panel
+	 * is too dim to read. */
 	for (int i = 0; i < BRIGHT_STOPS; i++) {
 		uint8_t lvl = 20 + i * 20;
 
 		seg[i] = lv_btn_create(bright_ov);
-		lv_obj_set_size(seg[i], 56, 64);
-		lv_obj_align(seg[i], LV_ALIGN_TOP_LEFT, 12 + i * 60, 66);
+		lv_obj_set_size(seg[i], 56, 116);
+		lv_obj_align(seg[i], LV_ALIGN_TOP_LEFT, 12 + i * 60, 86);
 		lv_obj_set_style_bg_opa(seg[i], LV_OPA_COVER, 0);
 		lv_obj_set_style_border_width(seg[i], 0, 0);
 		lv_obj_set_style_radius(seg[i], 8, 0);
@@ -1753,31 +1710,13 @@ static void show_bright(lv_event_t *e)
 				    (void *)(intptr_t)lvl);
 	}
 
-	con_lbl = lv_label_create(bright_ov);
-	lv_obj_set_style_text_color(con_lbl, COL_TEXT, 0);
-	lv_obj_align(con_lbl, LV_ALIGN_TOP_MID, 0, 140);
+	lv_obj_t *hint = lv_label_create(bright_ov);
 
-	for (int i = 0; i < PANEL_CONTRAST_LEVELS; i++) {
-		con_btn[i] = lv_btn_create(bright_ov);
-		lv_obj_set_size(con_btn[i], 92, 56);
-		lv_obj_align(con_btn[i], LV_ALIGN_TOP_LEFT, 12 + i * 100, 164);
-		lv_obj_set_style_bg_opa(con_btn[i], LV_OPA_COVER, 0);
-		lv_obj_set_style_border_color(con_btn[i], COL_TRACK, 0);
-		lv_obj_set_style_border_width(con_btn[i], 1, 0);
-		lv_obj_set_style_radius(con_btn[i], 8, 0);
-		lv_obj_set_style_shadow_width(con_btn[i], 0, 0);
-		lv_obj_set_style_pad_all(con_btn[i], 0, 0);
-		lv_obj_clear_flag(con_btn[i], LV_OBJ_FLAG_SCROLLABLE);
-		lv_obj_clear_flag(con_btn[i], LV_OBJ_FLAG_GESTURE_BUBBLE);
-		lv_obj_add_event_cb(con_btn[i], contrast_cb, LV_EVENT_CLICKED,
-				    (void *)(intptr_t)i);
+	lv_label_set_text(hint, "Tap a level");
+	lv_obj_set_style_text_color(hint, COL_DIM, 0);
+	lv_obj_align(hint, LV_ALIGN_TOP_MID, 0, 210);
 
-		con_txt[i] = lv_label_create(con_btn[i]);
-		lv_label_set_text(con_txt[i], panel_contrast_name((uint8_t)i));
-		lv_obj_center(con_txt[i]);
-	}
-
-	bright_refresh();	/* paints the stops, the buttons and the readouts */
+	bright_refresh();	/* paints the stops and the readout */
 }
 #endif /* !CONFIG_BLINK_WIFI_MODE */
 
@@ -2372,9 +2311,8 @@ BUILD_ASSERT(FOOT_Y2 + 16 <= 240,
 
 	char sub[56];
 
-	snprintf(sub, sizeof(sub), "%d%%  |  Contrast: %s", backlight_get(),
-		 panel_contrast_name(panel_contrast_get()));
-	mk_row(panel, ROW_TOP, ROW_H, "Display", sub, false, show_bright, NULL,
+	snprintf(sub, sizeof(sub), "%d%%", backlight_get());
+	mk_row(panel, ROW_TOP, ROW_H, "Brightness", sub, false, show_bright, NULL,
 	       &pct_lbl);
 
 	/*

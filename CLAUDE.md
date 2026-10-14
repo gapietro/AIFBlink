@@ -139,7 +139,7 @@ how it was found. No trailers (see the top of this file).
   flash.
 - `docs/windows-check.md` — the ten-minute manual pass, once per release.
 - `docs/fleet-testing.md` and `tools/fleet/fleet.toml` — the desks a release
-  is proved on. This fork has one (this Mac, a Claude board); the doc still
-  describes upstream's three, which this fork cannot reach.
+  is proved on. This fork has one (this Mac, a Claude board); upstream's
+  three are unreachable from here and are mentioned only as history.
 - `docs/open-bugs/` — open faults with what has been measured, so nobody
   re-derives it.

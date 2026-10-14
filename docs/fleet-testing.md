@@ -3,28 +3,42 @@
 CI proves the pieces. It cannot prove the product, because no runner has a
 board on a USB cable, an account signed in, or a login service that has been
 running since somebody's last reboot. This suite does: it drives the **real
-daemon** against a **real board** on three desks -- a Mac, an Ubuntu machine
-and a Windows 10 machine -- and `tools/release.sh` refuses to build a release
-until it has.
+daemon** against a **real board** on every desk in `tools/fleet/fleet.toml`,
+and `tools/release.sh` refuses to build a release until it has.
 
-One run stops the installed service on three machines and takes their boards
-for the best part of ten minutes. That is the cost, and it buys the only
-evidence anyone has that a tag runs on hardware.
+**This fork has one desk:** `local-mac`, the Intel Mac this checkout lives on,
+with a Claude-edition board on its USB port. Upstream (KfirLevy258/Blink) proved
+its releases on three -- its own Mac, an Ubuntu laptop and a Windows 10 box,
+reached over ssh -- and none of them is reachable from here. The gate insists
+that every listed desk has passed, so while they stayed listed no release
+could be cut from this fork at all. Linux and Windows are therefore proved by
+CI alone: `installer.yml` and `release-binaries.yml` build the program on each
+platform and install, update and uninstall it on a runner, which has no board; and the Codex page
+is proved by nothing on hardware, because the one board here is a Claude one.
+Add a desk to the inventory when one exists, and everything below works
+unchanged with more than one.
+
+One run stops the installed service on this Mac and takes the board for four
+or five minutes. That is the cost, and it buys the only evidence anyone has
+that a tag runs on hardware.
 
 ## The one command
 
 ```bash
-python3 tools/fleet/run.py
+PYTHONDONTWRITEBYTECODE=1 .venv-test/bin/python tools/fleet/run.py
 ```
 
 Needs Python 3.11 or newer (it reads the inventory with `tomllib`), and can be
-started from anywhere -- it resolves this checkout from its own path.
+started from anywhere -- it resolves this checkout from its own path. On this
+Mac `/usr/bin/python3` is Apple's 3.9, so use the test venv.
 
-For each desk it takes a snapshot of **HEAD** (`git archive` piped into `tar -x`
-over ssh), deletes the previous `result.json` on the far side in the same
-command that unpacks the snapshot, runs `python -m tests.fleet.agent` there,
-and copies the result back. The three desks run at the same time -- one board
-each, no shared state. The verdicts are printed as a table and written to
+For each desk it takes a snapshot of **HEAD** (`git archive` piped into `tar -x`,
+over ssh for a remote desk), deletes the previous `result.json` on the far side
+in the same command that unpacks the snapshot, runs `python -m
+tests.fleet.agent` there, and copies the result back. The `local-mac` desk has
+no ssh line, so all of that happens on this machine with no ssh at all. With
+more than one desk they run at the same time -- one board each, no shared
+state. The verdicts are printed as a table and written to
 `.fleet/last_run.json`, which is the file the release gate reads.
 
 HEAD, not the working tree. Uncommitted edits are not on the desks and are not
@@ -55,8 +69,9 @@ what was proved, so commit first.
 The four scenarios are about four minutes of wall clock, of which `sleep_wake`
 is roughly half: it contains a deliberate 45-second silence, because that is
 the only thing that makes this board sleep. With the preflight and the
-real-account pass a desk is busy for five to eight minutes, and the desks run
-in parallel, so that is roughly the length of the whole run. Bundles add a few
+real-account pass a desk is busy for five to eight minutes, and desks run in
+parallel, so that is roughly the length of the whole run. On `local-mac` a
+full run has measured about four minutes. Bundles add a few
 minutes more per desk -- unpacking 50 MB and an installer that self-tests the
 copy it made.
 
@@ -70,29 +85,29 @@ a failed release, and slow is not broken.
 ### Seeing the commands without running anything
 
 ```bash
-python3 tools/fleet/run.py --dry-run
+.venv-test/bin/python tools/fleet/run.py --dry-run
 ```
 
 ```
-galit-win10 (windows, galit@lenovo-r90r7u44.lan):
-  push: ['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=20', 'galit@lenovo-r90r7u44.lan', 'mkdir "%USERPROFILE%\\blink-fleet" 2>nul & del /q "%USERPROFILE%\\blink-fleet\\result.json" 2>nul & tar -x -f - -C "%USERPROFILE%\\blink-fleet"']
-  run : ['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=20', 'galit@lenovo-r90r7u44.lan', 'cd /d "%USERPROFILE%\\blink-fleet" && python -m tests.fleet.agent --board codex --out result.json --real-account']
-  pull: ['scp', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=20', 'galit@lenovo-r90r7u44.lan:blink-fleet/result.json', '<temporary file>']
-...
+local-mac (darwin, no ssh, this machine):
+  push: ['tar', '-x', '-f', '-', '-C', '/Users/gpietro/blink-fleet']
+  run : ['/Users/gpietro/projects/AIFBlink/.venv-test/bin/python', '-m', 'tests.fleet.agent', '--board', 'claude', '--out', 'result.json', '--real-account']
+
 Nothing was run and no desk was contacted.
 ```
 
 It contacts nothing and, alone among the run modes, leaves
 `.fleet/last_run.json` alone -- every other run deletes it before it starts, so
 that a run which dies halfway leaves no file rather than last week's green one.
-The Windows line is the reason this flag exists: it is built for a shell that
-cannot be tested anywhere but on that desk.
+A Windows desk is the reason this flag exists: its remote shell is `cmd.exe`,
+and the line built for it cannot be tested anywhere but on that desk. Upstream
+had one; this fork does not yet.
 
 ### Narrowing a run
 
 | Flag | Means |
 |---|---|
-| `--only local-mac,kfir-ubuntu` | These desks, by their inventory names |
+| `--only local-mac` | These desks, by their inventory names, comma-separated |
 | `--scenarios overage,stale_age` | These scenario names, on every desk |
 | `--state .fleet/scratch.json` | Write the verdict somewhere else |
 | `--no-real-account` | Skip the pass against each desk's own account |
@@ -158,8 +173,9 @@ the alternative is stopping two desks' services, discovering the third has no
 | `has_claude_desktop` | Recorded in that desk's result for the reader. The orchestrator does not act on it. |
 
 There is deliberately **no port** in this file. The daemon finds the board by
-USB vendor and product ID (CH340, `0x1A86:0x7523`), which is how it picks COM15
-out of the Windows desk's twelve mostly-Bluetooth COM ports. A port written
+USB vendor and product ID (CH340, `0x1A86:0x7523`), which is how upstream's
+Windows desk picked COM15 out of twelve mostly-Bluetooth COM ports, and how
+this Mac finds `/dev/cu.usbserial-141230` without being told. A port written
 down here would work until somebody moved the cable to the next socket, and
 would then fail as a dead board. `run.py` has no `--port` flag for the same
 reason.
@@ -171,7 +187,7 @@ Checking it is a one-liner per desk and is worth doing before blaming the
 hardware:
 
 ```bash
-/usr/bin/python3 -c "import serial; print(serial.__version__)"
+.venv-test/bin/python -c "import serial; print(serial.__version__)"
 ```
 
 A relative `python` path on the **local** desk is resolved against this
@@ -183,8 +199,10 @@ gitignored, so it is not inside the snapshot that gets pushed.
 Edit `board =` on both desks. Nothing else: no port, no serial number, no
 per-desk scenario.
 
-The `board` values carry a `# VERIFY before the run` comment because they are
-the one thing in the file the suite cannot check for itself. A `codex` value
+The `board` value is the one thing in the file the suite cannot check for
+itself, which is why `local-mac`'s carries a comment saying how it was
+measured: board `8c94df935ad0` was stamped CLAUDE by `tools/burn.sh` and its
+boot log said `[boot] edition: claude`. A `codex` value
 makes the agent replay the same timeline attributed to Codex, in a copy of the
 scenario file; the board applies whatever frame it is given and prints its
 `[usage] session ...` line either way. So a stale `board` value does not go
@@ -220,7 +238,7 @@ Here is `stale_age.json`, with its `note` shortened:
 | `name`, `note` | For the reader. `note` is where the reason this file exists goes. |
 | `steps[].at` | Seconds since the provider was constructed. A step fires **once**, when elapsed time reaches it: a step is an event, not a level. One step per poll, oldest first -- a poll becomes a single usage message however many steps have come due, so the replay delays a late timeline rather than collapsing it. |
 | `steps[].age_s` | How old the reading claims to be (`observed_at = now - age_s`), so a step can be four hours old the instant it fires. Defaults to 0. |
-| Other `steps[]` fields | A usage frame as plain JSON -- `provider`, `session_pct`, `weekly_pct`, `state`, `stale`. A field name that does not exist on the frame drops that step, with a line on stderr, rather than taking the daemon down on three machines. |
+| Other `steps[]` fields | A usage frame as plain JSON -- `provider`, `session_pct`, `weekly_pct`, `state`, `stale`. A field name that does not exist on the frame drops that step, with a line on stderr, rather than taking the daemon down on every desk. |
 | `duration_s` | How long the daemon runs. The agent adds its own grace on top for the last frame to be polled, sent and applied. |
 | `host_silence_s` | Seconds with the **daemon stopped** in the middle. Only a scenario that has this sleeps. |
 | `wake_duration_s` | How long the second daemon runs, after the silence. |
@@ -284,10 +302,10 @@ from its own start.
    would produce one frame and never reach the sequence under test).
 4. Write all four `expect` keys, counting `min_tx` yourself -- and doubling it
    if the scenario has a `host_silence_s`.
-5. Try it on one desk before it goes to three:
+5. Try it on its own before it goes into a full run:
 
 ```bash
-python3 tools/fleet/run.py --only local-mac --scenarios my_scenario \
+.venv-test/bin/python tools/fleet/run.py --scenarios my_scenario \
     --state .fleet/scratch.json
 ```
 
@@ -305,7 +323,8 @@ sees the real account.
 
 **Each machine has to be signed in** to whatever it is supposed to be reading:
 Claude Code, Codex CLI, and Claude Desktop on the desk whose inventory entry
-says `has_claude_desktop = true`. A desk that is signed out fails this pass and
+says `has_claude_desktop = true` (`local-mac` says `false`). A desk that is
+signed out fails this pass and
 only this pass, which is exactly the signal wanted -- the other four scenarios
 would sail past it.
 
@@ -317,9 +336,10 @@ It asserts three things:
    the board.
 3. Afterwards -- not alongside, so it is not competing for the serial port --
    `blink status --wire` prints one line that parses as a JSON object. That is
-   the command a support conversation starts with, and on the Windows desk its
-   message carries a path through a non-ASCII profile name, which is the
-   decode error that once left a whole machine with no figure on its board.
+   the command a support conversation starts with, and on upstream's Windows
+   desk its message carried a path through a non-ASCII profile name, which is
+   the decode error that once left a whole machine with no figure on its
+   board.
 
 It does not assert any particular number. The percentages come from a live
 account, so no count of stale lines and no sleep window can be asked of it
@@ -364,19 +384,24 @@ feed has to come from a genuinely signed release.
 `tools/release.sh` produces one without publishing anything:
 
 ```bash
-BLINK_RELEASE_DRAFT=1 tools/release.sh
+BLINK_RELEASE_DRAFT=1 BLINK_PYTHON=$PWD/.venv-test/bin/python tools/release.sh
 ```
 
 That builds and signs everything, attaches it to a **draft** release, and
-stops. Then, on each desk, fetch that platform's files into the workdir:
+stops. Then, on each desk, fetch that platform's files into the workdir. This
+Mac is Intel, so its archive is `blink-macos-x86_64.tar.gz`:
 
 ```bash
 cd ~/blink-fleet
-gh release download v1.2.6 --repo KfirLevy258/Blink -D feed \
-    -p manifest.json -p manifest.json.sig -p blink-macos-arm64.tar.gz
-gh release download v1.2.5 --repo KfirLevy258/Blink -D bundles/previous \
-    -p blink-macos-arm64.tar.gz
+gh release download v1.3.5 --repo gapietro/AIFBlink -D feed \
+    -p manifest.json -p manifest.json.sig -p blink-macos-x86_64.tar.gz
+gh release download v1.3.4 --repo gapietro/AIFBlink -D bundles/previous \
+    -p blink-macos-x86_64.tar.gz
 ```
+
+The previous release has to be one of this fork's: one of upstream's is
+signed with upstream's keys, and the installed copy would refuse this fork's
+feed.
 
 The feed directory has to hold all three of `manifest.json`,
 `manifest.json.sig` and this platform's archive; the agent checks that before
@@ -395,22 +420,25 @@ run reads as a broken update path.
 
 These three paths are forwarded **verbatim and interpreted on the target
 desk**, and release archives are per-platform: `blink-macos-arm64.tar.gz`,
-`blink-linux-x86_64.tar.gz`, `blink-windows-x86_64.zip`. One `--bundle` string
-therefore cannot name the right file on all three machines. A *directory* name
-can be shared (relative paths resolve against each desk's workdir, so
-`--ota-dir feed` works everywhere), but an archive name cannot, so the
-customer-path scenarios are run one desk at a time:
+`blink-macos-x86_64.tar.gz`, `blink-linux-x86_64.tar.gz`,
+`blink-windows-x86_64.zip`. With more than one desk, one `--bundle` string
+cannot name the right file on every machine. A *directory* name can be shared
+(relative paths resolve against each desk's workdir, so `--ota-dir feed` works
+everywhere), but an archive name cannot, so the customer-path scenarios are run
+one desk at a time:
 
 ```bash
-python3 tools/fleet/run.py --only galit-win10 --state .fleet/galit-bundles.json \
-    --bundle bundles/candidate/blink-windows-x86_64.zip \
-    --prev-bundle bundles/previous/blink-windows-x86_64.zip \
-    --ota-dir feed --expect-version 1.2.6
+.venv-test/bin/python tools/fleet/run.py --only local-mac \
+    --state .fleet/local-mac-bundles.json \
+    --bundle feed/blink-macos-x86_64.tar.gz \
+    --prev-bundle bundles/previous/blink-macos-x86_64.tar.gz \
+    --ota-dir feed --expect-version 1.3.5
 ```
 
 Two consequences worth being plain about. A `--only` run is refused by the
-release gate, so these runs prove the customer path but do not license a
-release by themselves -- read their table and keep them. And `--state` is not
+release gate even when it names the only desk there is, so these runs prove
+the customer path but do not license a release by themselves -- read their
+table and keep them. And `--state` is not
 optional decoration: without it this run would delete the full fleet run's
 verdict on its way past. Do the per-desk bundle runs first, or write them
 somewhere else, and finish with the full run the gate will read.
@@ -420,9 +448,11 @@ somewhere else, and finish with the full run the gate will read.
 Before it builds anything, `tools/release.sh` runs:
 
 ```bash
-python3 -m pc.fleet_gate .fleet/last_run.json "$(git rev-parse HEAD)" \
+"$PY" -m pc.fleet_gate .fleet/last_run.json "$(git rev-parse HEAD)" \
     tools/fleet/fleet.toml
 ```
+
+where `$PY` is `$BLINK_PYTHON`, or plain `python3` when that is unset.
 
 You can run exactly that by hand from the checkout root. It exits 0 and prints
 one line when the commit may be released, or exits 1 with the reason on stderr;
@@ -441,16 +471,19 @@ It insists on all six of:
 5. It was not narrowed with `--scenarios`.
 6. Every desk named in `tools/fleet/fleet.toml` is present and green.
 
-The last three are why the gate is not simply a `grep ok`. `run.py --only
-kfir-ubuntu` exits 0 and writes `ok: true`, and is *right* to -- that run did
-pass -- so a single-desk result is both honest and nowhere near enough to ship
-on. The desk list is read from `fleet.toml` rather than from the result,
-because a file cannot vouch for its own completeness.
+The last three are why the gate is not simply a `grep ok`. With two desks
+listed, `run.py --only` one of them exits 0 and writes `ok: true`, and is
+*right* to -- that run did pass -- so a single-desk result is both honest and
+nowhere near enough to ship on. The desk list is read from `fleet.toml` rather
+than from the result, because a file cannot vouch for its own completeness.
+That is also why the upstream desks had to leave this fork's `fleet.toml`
+rather than be skipped: a desk listed there is a desk the gate waits for.
 
 It refuses whenever it **cannot** check: no file, an unreadable one, a damaged
-one, a missing inventory, or a Python too old for `tomllib` (`release.sh` calls
-plain `python3`, and `/usr/bin/python3` on this Mac is still 3.9). Silence from
-a gate must never read as approval.
+one, a missing inventory, or a Python too old for `tomllib` (`release.sh` runs
+the gate with `$BLINK_PYTHON`, falling back to plain `python3`, and
+`/usr/bin/python3` on this Mac is still 3.9 -- hence `BLINK_PYTHON` pointing at
+the test venv). Silence from a gate must never read as approval.
 
 ### Releasing without it
 
@@ -473,8 +506,8 @@ the last thing between a bad build and all of them.
 
 | What you see | What it is | What to do |
 |---|---|---|
-| `PermissionError 13` opening `/dev/ttyUSB0`, every scenario red on `kfir-ubuntu` | That user is not in the `dialout` group, and the device is `crw-rw---- root dialout`. A healthy board looks broken. | `sudo usermod -aG dialout kfir`, then re-login **on that machine**. A new ssh connection picks up the group; the desktop's own login service does not until that session restarts. |
-| `PermissionError(13, 'Access is denied.')` on COM15 | On Windows this normally means the installed daemon still holds the port -- which is why the agent stops the service first. Seeing it means the stop did not take. | Check the Scheduled Task is really stopped, and that no daemon from an earlier run survived. Do not add a port to `fleet.toml`: that desk has twelve COM ports, eleven of them Bluetooth, and the daemon finds the right one by USB vendor and product ID, not by name. |
+| `PermissionError 13` opening `/dev/ttyUSB0`, every scenario red on a Linux desk (seen on upstream's Ubuntu laptop) | That user is not in the `dialout` group, and the device is `crw-rw---- root dialout`. A healthy board looks broken. | `sudo usermod -aG dialout <user>`, then re-login **on that machine**. A new ssh connection picks up the group; the desktop's own login service does not until that session restarts. |
+| `PermissionError(13, 'Access is denied.')` on a COM port | On Windows this normally means the installed daemon still holds the port -- which is why the agent stops the service first. Seeing it means the stop did not take. | Check the Scheduled Task is really stopped, and that no daemon from an earlier run survived. Do not add a port to `fleet.toml`: upstream's Windows desk had twelve COM ports, eleven of them Bluetooth, and the daemon finds the right one by USB vendor and product ID, not by name. |
 | The run aborts naming `BLINK_SKIP_SERVICE` | That variable is set in the operator's shell, which would make the service stop a silent no-op -- the real daemon keeps the port, ours is refused it, and a healthy board is reported as a hardware fault. | `unset BLINK_SKIP_SERVICE` and start again. Nothing was run and the service was left alone. |
 | "No board message arrived within 15s on any of 3 attempts" | Either the port is still held by the service that was just stopped, or no board is attached. The message deliberately does not guess: those two look identical from here. | Look at the desk. |
 | "the daemon's first traffic came 7.2s after it was started" | The timeline was shifted by that much, so its last steps may not have been reached before the daemon was stopped. The run is reported as *inconclusive*, not as a failed board. | Run it again rather than reading anything into it. |

@@ -150,6 +150,49 @@ int fmt_pips(int n_run, int n_wait, int n_fail, int n_fin,
 #define FMT_TOAST_MAX 64
 
 /*
+ * SPEND LIMITS -- the Enterprise page (pc/claude_account.py).
+ *
+ * An Enterprise login is metered by a dollar cap per day, week or month
+ * rather than by a five-hour window, so on that page the two gauges are
+ * relabelled: the left one is the share of the cap used, the right one the
+ * dollars behind it. These three are the words; usage_view.c only places
+ * them. Everything a host test can reach lives here for the reason the rest
+ * of this file does -- usage_view.c needs LVGL and cannot be built on a
+ * laptop.
+ */
+
+/* Longest is "of $99.9M" plus NUL; round up. */
+#define FMT_USD_MAX 16
+
+/*
+ * A dollar amount the way the right-hand gauge can hold it: at most six
+ * characters, because it is drawn at montserrat_20 inside the ring's hollow
+ * (tests/usage_layout measures the widest).
+ *
+ *   usd < 0, NaN  -> "--"       (Claude Code had not sent dollars yet)
+ *   < 10          -> "$4.37"    (cents matter when the whole sum is cents)
+ *   < 1000        -> "$314"
+ *   < 99950       -> "$1.2k", "$12.5k"
+ *   < 999500      -> "$314k"
+ *   otherwise     -> "$1.2M", capped at "$999M"
+ *
+ * Rounded to nearest, and the thresholds sit where rounding would otherwise
+ * carry into the next unit's spelling: 999.6 is "$1.0k", not "$1000".
+ */
+void fmt_usd(double usd, char *buf, size_t buflen);
+
+/* "of $500" under the dollars, or "" when the limit is not known. */
+void fmt_usd_limit(double usd, char *buf, size_t buflen);
+
+/*
+ * The left gauge's caption on a spend page, from the wire's `period`:
+ * "SPEND month", "SPEND week", "SPEND today", or plain "SPEND" when the
+ * period was not reported. Capitals because it sits where "SESSION 5h" and
+ * "WEEKLY 7d" sit, and those are captions rather than sentences.
+ */
+const char *fmt_spend_caption(const char *period);
+
+/*
  * The one sentence a status-change popup says.
  *
  *   count <= 0             -> ""                            (nothing happened)

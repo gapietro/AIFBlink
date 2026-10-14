@@ -258,4 +258,26 @@ void usage_view_set_provider2(const char *tag, double session_pct,
 			      double weekly_pct, int32_t session_resets_in_s,
 			      int32_t weekly_resets_in_s, bool stale);
 
+/*
+ * What kind of allowance one provider's page is showing -- the daemon's
+ * `plan` message (pc/protocol.plan). An empty `tag` means no page has one,
+ * and every page is back to session and weekly windows.
+ *
+ *   kind "spend"       the left gauge is the share of a dollar cap used and
+ *                      its reset; the right one shows the dollars, with the
+ *                      cap under them. `period` is "daily", "weekly" or
+ *                      "monthly", or "" when not reported; usd and lim are
+ *                      -1 when not reported.
+ *   kind "unreported"  an Enterprise or Team login whose usage nothing on
+ *                      the computer can read; `acct` is "enterprise" or
+ *                      "team". The page says so instead of drawing blank
+ *                      gauges that look like a fault.
+ *
+ * Anything else is treated as no plan, so a newer daemon's new kind falls
+ * back to the gauges this firmware knows.
+ */
+void usage_view_set_plan(const char *tag, const char *kind,
+			 const char *period, const char *acct,
+			 double usd, double lim);
+
 #endif /* USAGE_VIEW_H */

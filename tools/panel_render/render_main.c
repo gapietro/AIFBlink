@@ -202,6 +202,36 @@ int main(int argc, char **argv)
 		usage_view_set_counts(29997, 9999, 9999, 9999);
 		usage_view_set_clock(20, 48);
 		break;
+	case 12: /* An Enterprise login behind a spend cap: the left gauge is
+		  * the share of a monthly limit with its reset weeks away, the
+		  * right one the dollars against it. Order as proto.c sees it:
+		  * the plan arrives before the usage line it describes. */
+		usage_view_set_provider1("claude");
+		usage_view_set_plan("claude", "spend", "monthly", "", 314.12, 500);
+		usage_view_update(62.8, 18 * 86400 + 4 * 3600, -1.0, -1);
+		usage_view_set_activity(USAGE_ACTIVITY_RUNNING);
+		usage_view_set_sessions(1, 0);
+		usage_view_set_clock(14, 05);
+		break;
+	case 13: /* The same cap nearly spent, with the dollars not yet sent
+		  * (Claude Code sends them minutes after the percentage) --
+		  * so the hint has to name the limit, not a session. */
+		usage_view_set_provider1("claude");
+		usage_view_set_plan("claude", "spend", "daily", "", -1, -1);
+		usage_view_update(96.4, 5 * 3600, -1.0, -1);
+		usage_view_set_activity(USAGE_ACTIVITY_NONE);
+		usage_view_set_sessions(0, 0);
+		usage_view_set_clock(19, 40);
+		break;
+	case 14: /* An Enterprise login with nothing on the computer to read. */
+		usage_view_set_provider1("claude");
+		usage_view_set_plan("claude", "unreported", "", "enterprise",
+				    -1, -1);
+		usage_view_update(-1.0, -1, -1.0, -1);
+		usage_view_set_activity(USAGE_ACTIVITY_RUNNING);
+		usage_view_set_sessions(1, 0);
+		usage_view_set_clock(14, 05);
+		break;
 	case 4:	/* nothing known: every optional field absent */
 		usage_view_set_provider1("");
 		usage_view_update(-1.0, -1, -1.0, -1);

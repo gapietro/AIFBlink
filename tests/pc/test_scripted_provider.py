@@ -89,3 +89,17 @@ def test_step_missing_at_is_skipped(tmp_path):
     sp = ScriptedProvider(p, now=lambda: 1000.0)
     frames = sp.poll(1000.0)
     assert [f.session_pct for f in frames] == [20.0]
+
+
+def test_a_reset_can_be_given_relative_to_the_reading(tmp_path):
+    """A scenario cannot know the epoch it will run at, so a spend period a
+    month long is written as seconds from the reading."""
+    clock = [1000.0]
+    p = _write(tmp_path, [
+        {"at": 0, "provider": "claude", "plan": "spend", "session_pct": 62.8,
+         "session_resets_in_s": 86400, "spend_usd": 314.12, "age_s": 5},
+    ])
+    f = ScriptedProvider(p, now=lambda: clock[0]).poll(clock[0])[0]
+    assert f.observed_at == 995.0
+    assert f.session_resets_at == 995.0 + 86400
+    assert (f.plan, f.spend_usd) == ("spend", 314.12)

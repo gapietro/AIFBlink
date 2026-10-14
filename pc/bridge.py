@@ -70,6 +70,7 @@ class Bridge:
         self._fetch_signed = fetch_signed_manifest
         self._app_update = None          # (version, artifact) from last query
         self._last_session = None        # (label, n) last sent; see poll_once
+        self._last_plan = None           # plan message last sent; see _send_plan_if_changed
         # The last usage message actually PUT ON THE WIRE, minus the fields
         # that move on their own (protocol.VOLATILE_USAGE_KEYS). This is what
         # poll_if_changed decides against: "sent", not "read", because the
@@ -98,6 +99,7 @@ class Bridge:
         # the same shape as offer_if_newer on every connect rather than once
         # per daemon lifetime.
         self._last_session = None
+        self._last_plan = None
         self.poll_once()                 # push current data immediately
         # Only once the board has been heard. On the no-reset connect path
         # greet() runs before any message has reached on_message, so
@@ -544,6 +546,10 @@ class Bridge:
             return
 
         if usage is None:
+            # Nothing to draw, but possibly something to UN-draw: an account
+            # switch can leave no reading at all for a while, and the plan the
+            # board holds describes the account that was signed in before.
+            self._send_plan_if_changed()
             # No statusline payload yet. The board keeps its last values and
             # its own dot, which is right -- but the daemon used to say nothing
             # at all, so a machine where Claude Code has simply never rendered
@@ -592,6 +598,7 @@ class Bridge:
         except Exception:
             return
         if usage is None:
+            self._send_plan_if_changed()
             return
         if protocol.meaningful_usage(usage) != self._last_pushed:
             self._send_usage(usage)
@@ -611,6 +618,11 @@ class Bridge:
         # Only the name goes out in that case. Re-sending an identical usage
         # line to carry it would spend the budget this comparison exists to
         # protect.
+        #
+        # The plan is the same story with money in it: Claude Code refreshes
+        # the dollar figures about every five minutes, on their own schedule,
+        # and a new "$318" can arrive while the percentage line is unchanged.
+        self._send_plan_if_changed()
         self._send_session_if_changed()
 
     def _read_usage(self):
@@ -626,10 +638,24 @@ class Bridge:
         # Percentages above 100 are real -- extra usage puts them there -- but
         # firmware older than protocol.FW_ACCEPTS_OVERAGE turns them into 0 on
         # the panel rather than clamping. Hold them at 100 for those boards.
-        return protocol.cap_overage_for_fw(usage, self._board_fw)
+        usage = protocol.cap_overage_for_fw(usage, self._board_fw)
+        # And a spend percentage is withheld from firmware that would draw it
+        # under "SESSION 5h" -- see protocol.FW_KNOWS_PLAN.
+        return protocol.hide_plan_for_fw(usage, self._plan_msg(),
+                                         self._board_fw)
+
+    def _plan_msg(self):
+        """The bus's plan message, or None from a fetch that has none --
+        every test fake, and any fetch older than plans."""
+        plan_msg = getattr(self._fetch, "plan_msg", None)
+        return plan_msg() if plan_msg is not None else None
 
     def _send_usage(self, usage):
         """Put a usage message on the wire and remember what was in it."""
+        # The plan FIRST: it says what the numbers in the usage line are, and
+        # a board that got them the other way round would draw a spend share
+        # under the old gauge names until the next message.
+        self._send_plan_if_changed()
         self._write(usage)
         # Recorded here, once, so that no path can push without moving the
         # baseline -- a push that forgot to would leave the fast tick
@@ -668,3 +694,18 @@ class Bridge:
         if pair != self._last_session:
             self._write(protocol.session(*pair))
             self._last_session = pair
+
+    def _send_plan_if_changed(self):
+        """Put the plan message on the wire, on change only.
+
+        On change rather than on every poll because it is a fact that moves
+        a few times a day -- at a /login, and when Claude Code refreshes the
+        dollars -- and the heartbeat already re-states everything a board
+        could have missed: greet() clears the record, so every connect sends
+        it afresh.
+        """
+        msg = self._plan_msg()
+        if msg is None or msg == self._last_plan:
+            return
+        self._write(msg)
+        self._last_plan = msg

@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 #include "fmt.h"
 
 void fmt_countdown(int32_t secs, char *buf, size_t buflen)
@@ -298,4 +299,65 @@ void fmt_toast(enum fmt_pip_kind kind, const char *label, int count,
 		}
 	}
 	snprintf(buf, buflen, "A session %s", clause);
+}
+
+void fmt_usd(double usd, char *buf, size_t buflen)
+{
+	if (buf == NULL || buflen == 0) {
+		return;
+	}
+	if (!(usd >= 0)) {	/* negative, and NaN, which fails every test */
+		snprintf(buf, buflen, "--");
+		return;
+	}
+	if (usd < 9.995) {
+		snprintf(buf, buflen, "$%.2f", usd);
+	} else if (usd < 999.5) {
+		snprintf(buf, buflen, "$%d", (int)(usd + 0.5));
+	} else if (usd < 99950.0) {
+		snprintf(buf, buflen, "$%.1fk", usd / 1000.0);
+	} else if (usd < 999500.0) {
+		snprintf(buf, buflen, "$%dk", (int)(usd / 1000.0 + 0.5));
+	} else if (usd < 99950000.0) {
+		snprintf(buf, buflen, "$%.1fM", usd / 1e6);
+	} else {
+		/*
+		 * Bounded, not printed: a number this size is a misread field,
+		 * and %d of anything bigger than INT32_MAX is undefined.
+		 */
+		double m = usd / 1e6;
+
+		snprintf(buf, buflen, "$%dM", m < 999.0 ? (int)(m + 0.5) : 999);
+	}
+}
+
+void fmt_usd_limit(double usd, char *buf, size_t buflen)
+{
+	char amount[FMT_USD_MAX];
+
+	if (buf == NULL || buflen == 0) {
+		return;
+	}
+	if (!(usd >= 0)) {
+		buf[0] = '\0';
+		return;
+	}
+	fmt_usd(usd, amount, sizeof(amount));
+	snprintf(buf, buflen, "of %s", amount);
+}
+
+const char *fmt_spend_caption(const char *period)
+{
+	if (period != NULL) {
+		if (strcmp(period, "monthly") == 0) {
+			return "SPEND month";
+		}
+		if (strcmp(period, "weekly") == 0) {
+			return "SPEND week";
+		}
+		if (strcmp(period, "daily") == 0) {
+			return "SPEND today";
+		}
+	}
+	return "SPEND";
 }

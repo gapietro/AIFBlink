@@ -8,7 +8,7 @@ import json
 import math
 
 from pc.version import PROTO_VERSION
-from pc.providers.base import STATE_UNKNOWN, worst_of
+from pc.providers.base import PLAN_SPEND, STATE_UNKNOWN, worst_of
 
 # Kept as a name because every message builder below already spells it this
 # way. It is the protocol's version, not the product's -- see pc/version.py.
@@ -72,6 +72,16 @@ def encode(msg: dict) -> bytes:
 # under twelve days: comfortably clear of the seven-day window, and six digits.
 COUNTDOWN_MAX_S = 999999
 
+# ...except for a spend limit, whose period can be a calendar month.
+#
+# An Enterprise spend cap resets at 00:00 UTC on the 1st, so on the 2nd the
+# honest countdown is 29 days -- and clamped to COUNTDOWN_MAX_S it would read
+# "11d 13h" for three weeks and then start to fall, which is a number that is
+# wrong every day it is shown. 32 days covers the longest month with a day to
+# spare, and it costs one digit on a line that has just stopped carrying a
+# seven-day countdown at all: a spend page sends weekly_resets_in_s as -1.
+SPEND_COUNTDOWN_MAX_S = 32 * 86400
+
 
 def encode_checked(msg: dict):
     """encode(), but None when the result could not be received.
@@ -88,7 +98,7 @@ def encode_checked(msg: dict):
     return raw, None
 
 
-def secs_until(resets_at, now_epoch: float) -> int:
+def secs_until(resets_at, now_epoch: float, cap: int = COUNTDOWN_MAX_S) -> int:
     """Seconds until `resets_at`. -1 when unknown or already past.
 
     -1 rather than 0 for missing input: 0 renders as "resets now", which is a
@@ -115,7 +125,7 @@ def secs_until(resets_at, now_epoch: float) -> int:
     # have already passed. Ceiling keeps the value honest (the window really
     # does have "about a second" left) and keeps 0 reserved for the firmware's
     # own countdown reaching it.
-    return min(COUNTDOWN_MAX_S, max(1, math.ceil(resets_at - now_epoch)))
+    return min(cap, max(1, math.ceil(resets_at - now_epoch)))
 
 
 def decode(line: str):
@@ -501,7 +511,8 @@ def frame_to_usage(frame, now_epoch: float, secondary=None) -> dict:
         frame.session_pct, frame.session_resets_at,
         frame.weekly_pct, frame.weekly_resets_at,
         [],
-        session_resets_in_s=secs_until(frame.session_resets_at, now_epoch),
+        session_resets_in_s=secs_until(frame.session_resets_at, now_epoch,
+                                       _cap_for(frame)),
         weekly_resets_in_s=secs_until(frame.weekly_resets_at, now_epoch),
         stale=frame.stale,
         provider=frame.provider, src=frame.src,
@@ -522,7 +533,8 @@ def frame_to_usage(frame, now_epoch: float, secondary=None) -> dict:
         p2_session_pct=(secondary.session_pct if secondary else UNKNOWN),
         p2_weekly_pct=(secondary.weekly_pct if secondary else UNKNOWN),
         p2_session_resets_in_s=(secs_until(secondary.session_resets_at,
-                                           now_epoch) if secondary else -1),
+                                           now_epoch, _cap_for(secondary))
+                                if secondary else -1),
         p2_weekly_resets_in_s=(secs_until(secondary.weekly_resets_at,
                                           now_epoch) if secondary else -1),
         p2_stale=(secondary.stale if secondary else False),
@@ -537,6 +549,106 @@ def frame_to_usage(frame, now_epoch: float, secondary=None) -> dict:
         # apart and what the board does with each.
         active_age_s=_active_age(frame, secondary, now_epoch),
     )
+
+
+def _cap_for(frame) -> int:
+    """The countdown ceiling for this frame's session slot -- see
+    SPEND_COUNTDOWN_MAX_S for why a spend period gets a longer one."""
+    if getattr(frame, "plan", "") == PLAN_SPEND:
+        return SPEND_COUNTDOWN_MAX_S
+    return COUNTDOWN_MAX_S
+
+
+# --------------------------------------------------------------------- plan
+
+# The first firmware that knows what a `plan` message is.
+#
+# Older firmware ignores the message type, which is the additive rule doing
+# its job -- but it does not ignore the usage line, and on a spend page that
+# line carries the share of the spend limit in `session_pct`. Drawn by 1.3.x
+# that is "SESSION 5h 62%": a real number under somebody else's name. So for
+# those boards the spend figure is withheld (hide_plan_for_fw) and the page
+# shows "--", which is what it showed for an Enterprise login before 1.4.0
+# anyway. Gated on the version that shipped the board half, like
+# FW_ACCEPTS_OVERAGE below and for the reason given there.
+FW_KNOWS_PLAN = (1, 4, 0)
+
+# One decimal place of dollars buys nothing on a panel that shows "$314" and
+# costs bytes on a line that must stay inside MAX_LINE_BYTES; whole cents are
+# what Claude Code's own /usage bar shows, and that is the most this sends.
+_USD_PLACES = 2
+
+
+def plan(provider="", kind="", period="", usd=None, limit=None, account=""):
+    """What kind of allowance a provider's page is showing.
+
+    Its own message type, like `session`, and for the same reason: the usage
+    line was measured at 509 of MAX_LINE_BYTES fully loaded, proto.c drops
+    an over-long line whole, and "$314.12 of $500 a month" does not fit in
+    three bytes. Sent on change and on every connect, BEFORE the usage line
+    it describes, so a board never draws a spend percentage under the old
+    gauge names for the length of a poll.
+
+    No `provider` means no page has a plan: every page is back to session
+    and weekly windows. That is the message a switch from the corporate
+    login back to a Max one produces, and the board needs to hear it as
+    much as it needed to hear the first one.
+
+    Unknown values are omitted, as on the usage line.
+    """
+    msg = {"t": "plan", "v": VERSION}
+    if not provider or not kind:
+        return msg
+    msg["provider"] = provider[:MODEL_MAX_CHARS]
+    msg["plan"] = kind
+    if period:
+        msg["period"] = period
+    if usd is not None and math.isfinite(usd) and usd >= 0:
+        msg["usd"] = round(float(usd), _USD_PLACES)
+    if limit is not None and math.isfinite(limit) and limit >= 0:
+        msg["lim"] = round(float(limit), _USD_PLACES)
+    if account:
+        msg["acct"] = account
+    return msg
+
+
+def plan_for(primary, secondary=None) -> dict:
+    """The plan message for the pair select_pair() chose.
+
+    Only one provider has plans today -- Claude -- so one message describes
+    the panel. The first frame in the pair that has a plan is the one named.
+    """
+    for f in (primary, secondary):
+        if f is not None and getattr(f, "plan", ""):
+            return plan(f.provider, f.plan, f.spend_period, f.spend_usd,
+                        f.spend_limit_usd, f.account)
+    return plan()
+
+
+def hide_plan_for_fw(msg, plan_msg, board_fw):
+    """Withhold a spend figure from a board that would mislabel it.
+
+    Returns a new message; the input is not mutated. See FW_KNOWS_PLAN. An
+    unknown board version hides, for the reason cap_overage_for_fw gives:
+    None means "not yet told", and guessing "new" is the guess that puts a
+    wrong label on a panel.
+    """
+    if not isinstance(msg, dict) or not isinstance(plan_msg, dict):
+        return msg
+    who = plan_msg.get("provider")
+    if not who:
+        return msg
+    fw = _fw_tuple(board_fw)
+    if fw is not None and fw >= FW_KNOWS_PLAN:
+        return msg
+    out = dict(msg)
+    if out.get("provider") == who:
+        out["session_pct"] = UNKNOWN
+        out["session_resets_in_s"] = -1
+    if out.get("p2") == who:
+        out.pop("p2_session_pct", None)
+        out.pop("p2_s_in_s", None)
+    return out
 
 
 def _active_age(frame, secondary, now_epoch: float) -> int:

@@ -14,7 +14,8 @@ able to stop it.
 import sys
 import time
 
-from pc import cowork_audit, desktop_idb, normalizer, protocol, weekly_anchor
+from pc import (claude_account, cowork_audit, desktop_idb, normalizer,
+                protocol, weekly_anchor)
 from pc.providers import base
 from pc.providers.claude_cli import ClaudeCliProvider
 from pc.providers.claude_desktop import ClaudeDesktopProvider
@@ -71,7 +72,14 @@ def default_providers():
 
 class IngestionBus:
     def __init__(self, providers=None, preferred_provider="claude",
-                 now=time.time):
+                 now=time.time, account=None):
+        # Which Claude account is signed in (pc/claude_account). Watched only
+        # with the real provider set: a scenario replaces every source on the
+        # machine precisely so that this desk's own state cannot change what
+        # it proves, and the signed-in account is this desk's own state.
+        if account is None and providers is None:
+            account = claude_account.AccountWatch()
+        self._account = account
         self._providers = (default_providers() if providers is None
                            else list(providers))
         self._preferred = preferred_provider
@@ -91,6 +99,8 @@ class IngestionBus:
         # second time could pick a different winner and name a project that
         # does not belong to the state on the panel.
         self._session_pair = ("", 0)
+        # The plan message for the last poll's pair -- see plan_msg().
+        self._plan = None
         # Guards the one-shot anchor seeding below: see
         # _seed_anchor_once. False until the first poll_frames() call,
         # regardless of whether that call finds anything to seed.
@@ -285,16 +295,46 @@ class IngestionBus:
 
     def poll(self):
         """The usage message for the board, or None when nothing is known."""
+        now = self._now()
+        frames = self.poll_frames()
+        kind, since, touched = "", None, None
+        if self._account is not None:
+            try:
+                self._account.poll(now)
+                kind = self._account.kind
+                since = self._account.since
+                touched = self._account.touched_at
+            except Exception:
+                # Reading somebody else's config file must never cost the
+                # poll. Unknown is the panel as it was before 1.4.0.
+                pass
+        frames = claude_account.select(frames, kind, since, now, touched)
         primary, secondary = normalizer.select_pair(
-            self.poll_frames(), preferred=self._preferred)
+            frames, preferred=self._preferred)
         if primary is None:
+            # No usage message this poll, but the plan still has to move.
+            # Back on the Max login after the corporate one, every reading
+            # from before the switch is gone and Max has not rendered yet --
+            # and a board left holding the last plan would go on saying
+            # "Not reported" about an account that is no longer signed in.
+            self._plan = protocol.plan()
             return None
-        msg = protocol.frame_to_usage(primary, self._now(), secondary)
+        msg = protocol.frame_to_usage(primary, now, secondary)
+        self._plan = protocol.plan_for(primary, secondary)
         # Against the state the message actually carries, which is not always
         # the primary frame's own -- see _pair_from.
         self._session_pair = _pair_from(
             primary, secondary, msg.get("state", base.STATE_UNKNOWN))
         return msg
+
+    def plan_msg(self):
+        """The `plan` message for the pair the last poll() chose.
+
+        Its own message, like the project name, and for the same measured
+        reason: the usage line runs within a few bytes of the board's 512
+        and dollar figures do not fit in a few bytes. See protocol.plan.
+        """
+        return self._plan
 
     def session_pair(self):
         """(label, n) for the state the last poll() put on the panel.
@@ -341,6 +381,9 @@ class _BusFetch:
 
     def session_pair(self):
         return self._bus.session_pair()
+
+    def plan_msg(self):
+        return self._bus.plan_msg()
 
 
 # Which count describes which state. STATE_FAILED reads n_stuck because that

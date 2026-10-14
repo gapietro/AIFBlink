@@ -126,7 +126,9 @@ def merge(frames):
                    and _survives_rollover(f, w_rolled, "weekly_rolled_at")),
         lambda f: f.weekly_pct)
 
-    if session_src is None and weekly_src is None:
+    unreported = next((f for f in frames
+                       if f.plan == base.PLAN_UNREPORTED), None)
+    if session_src is None and weekly_src is None and unreported is None:
         # Nothing here carries a usage percentage. A frame with only a model
         # name would render as two blank dials, which is worse than the
         # board keeping the last reading it already has.
@@ -172,7 +174,12 @@ def merge(frames):
     # desktop reading merged with an hours-old CLI reading is not a stale
     # panel, it is a live percentage next to a reset time that has simply
     # stopped being updated (and secs_until already refuses a past one).
-    primary = session_src or weekly_src
+    #
+    # A PLAN_UNREPORTED frame is the primary only when nothing carries a
+    # number: it is the statement "there is no reading", and it may stand in
+    # for one but never displace one. pc/claude_account.select only makes
+    # it when there is nothing else, so this is the second half of one rule.
+    primary = session_src or weekly_src or unreported
 
     # And the fact `primary` cannot carry: when this provider last said
     # anything at all.
@@ -214,6 +221,16 @@ def merge(frames):
         n_idle=state_src.n_idle if state_src else 0,
         n_agents=state_src.n_agents if state_src else 0,
         label=state_src.label if state_src else "",
+        # The plan and its dollars travel with the PRIMARY reading, never
+        # field by field: "62% of a $500 monthly cap" is one statement, and
+        # assembling it from two readings could pair a percentage with a
+        # limit it was never measured against. pc/claude_account.select has
+        # already made every usage frame in this group the same plan.
+        plan=primary.plan,
+        spend_usd=primary.spend_usd,
+        spend_limit_usd=primary.spend_limit_usd,
+        spend_period=primary.spend_period,
+        account=primary.account,
     )
 
 

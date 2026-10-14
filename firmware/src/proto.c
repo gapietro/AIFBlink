@@ -59,6 +59,12 @@ static size_t line_len;
  * and let usage_view saturate the ring.
  */
 #define PCT_MAX 1000.0
+/*
+ * A billion dollars. Not a limit anybody has; a bound so that a misread field
+ * reaches fmt_usd() as a number it can print rather than as whatever strtod
+ * made of it.
+ */
+#define USD_MAX 1e9
 
 static void num(const char *json, const char *key, double *out,
 		double lo, double hi)
@@ -664,6 +670,35 @@ static void dispatch(const char *json)
 		printk("[proto] host status: %s\n", st);
 		usage_view_set_status(strcmp(st, "rate_limited") == 0 ?
 				      USAGE_STATUS_STALE : USAGE_STATUS_ERROR);
+	} else if (strcmp(type, "plan") == 0) {
+		/*
+		 * What kind of allowance a provider's page is showing: an
+		 * Enterprise spend cap, or an account with nothing readable.
+		 * Its own message because the usage line is within a few bytes
+		 * of LINE_MAX and dollars are not a few bytes -- see
+		 * pc/protocol.plan. The daemon sends it BEFORE the usage line
+		 * it describes, and an empty one when no page has a plan.
+		 *
+		 * Every field optional: a missing amount is -1, "not reported",
+		 * which is ordinary -- Claude Code sends the dollars minutes
+		 * after the percentage, and never under its no-traffic setting.
+		 */
+		char who[16] = "", kind[16] = "", period[12] = "", acct[16] = "";
+		double usd = -1, lim = -1;
+
+		msg_get_str(json, "provider", who, sizeof(who));
+		msg_get_str(json, "plan", kind, sizeof(kind));
+		msg_get_str(json, "period", period, sizeof(period));
+		msg_get_str(json, "acct", acct, sizeof(acct));
+		num(json, "usd", &usd, 0, USD_MAX);
+		num(json, "lim", &lim, 0, USD_MAX);
+		usage_view_set_plan(who, kind, period, acct, usd, lim);
+		/* The board's own word that it applied one, like the [usage]
+		 * line beside it -- the only end-to-end evidence a fleet run
+		 * can read back. The kind and no amounts: what was drawn is
+		 * the question, not how much somebody spent. */
+		printk("[plan] %s %s%s%s\n", who[0] ? who : "-",
+		       kind[0] ? kind : "windows", period[0] ? " " : "", period);
 	} else if (strcmp(type, "session") == 0) {
 		/*
 		 * Which project is doing the thing the dot is already

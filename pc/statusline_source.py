@@ -9,6 +9,7 @@ old. Old is reported as `stale` rather than hidden -- a frozen meter presented
 as live is the one failure mode worth designing against.
 """
 import json
+import math
 import os
 import time
 
@@ -158,6 +159,71 @@ def _rolled_over(pct: float, resets_at, now_epoch: float, stale: bool):
     return (base.UNKNOWN if (stale or pct < 0) else 0.0), None, resets_at
 
 
+def _dollars(v):
+    """A dollar figure from the payload, or None. Never negative, never NaN:
+    either would reach the panel as "$-3" or "$nan", and "not reported" is
+    the honest reading of a field that is not a sensible amount."""
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
+        return None
+    v = float(v)
+    return v if math.isfinite(v) and v >= 0 else None
+
+
+def _spend_frame(rate_limits: dict, now_epoch: float, mtime_epoch: float):
+    """A PLAN_SPEND frame from `rate_limits.spend_limit`, or None.
+
+    This object is how an Enterprise login reports its allowance, and only
+    one kind of Enterprise login: Claude Code sends it when it talks to
+    Anthropic through a Claude apps gateway that sets a spend cap for this
+    developer (code.claude.com/docs/en/statusline#spend-limit-fields). A
+    plain claude.ai Enterprise login gets no `rate_limits` at all, and that
+    case is pc/claude_account's to name, not this function's.
+
+    The percentage and its reset come with every response; the dollar
+    figures and the period come from a separate request about five minutes
+    behind, need Claude Code 2.1.284 on both ends, and are absent under
+    CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC. So the percentage is the one
+    field this frame cannot do without, and everything else is optional.
+
+    When it is present it wins over the five-hour and seven-day windows, on
+    the rare payload carrying both: the gateway enforces the spend cap on
+    every request, so it is the limit that will actually stop this person.
+
+    A period that has rolled over is carried across exactly as a window is
+    (see _rolled_over): 0% while the reading is fresh, unknown once it is
+    old -- and the dollars go with it, because spend that was forgiven at
+    midnight UTC on the 1st is not $314 any more.
+    """
+    w = rate_limits.get("spend_limit")
+    if not isinstance(w, dict):
+        return None
+    try:
+        pct = float(w["used_percentage"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if not math.isfinite(pct) or pct < 0:
+        return None
+    resets = w.get("resets_at")
+    resets = resets if (isinstance(resets, (int, float))
+                        and not isinstance(resets, bool)) else None
+    used = _dollars(w.get("used_usd"))
+    limit = _dollars(w.get("limit_usd"))
+    period = w.get("period")
+    period = period if period in base.SPEND_PERIODS else ""
+
+    stale = (now_epoch - mtime_epoch) > STALE_AFTER_S
+    pct, resets, rolled = _rolled_over(pct, resets, now_epoch, stale)
+    if rolled is not None:
+        used = 0.0 if pct == 0.0 else None
+    return base.NormalizedUsageFrame(
+        provider=PROVIDER_ID, src=SRC_ID, observed_at=mtime_epoch,
+        session_rolled_at=rolled,
+        session_pct=pct, session_resets_at=resets,
+        stale=stale, plan=base.PLAN_SPEND,
+        spend_usd=used, spend_limit_usd=limit, spend_period=period,
+    )
+
+
 def map_statusline_frame(payload: dict, now_epoch: float,
                          mtime_epoch: float):
     """Convert a statusline payload into a NormalizedUsageFrame.
@@ -172,6 +238,9 @@ def map_statusline_frame(payload: dict, now_epoch: float,
     # took this source off the bus for the rest of the process.
     if not isinstance(rate_limits, dict):
         rate_limits = {}
+    spend = _spend_frame(rate_limits, now_epoch, mtime_epoch)
+    if spend is not None:
+        return spend
     session_pct, session_resets = _window(rate_limits, "five_hour")
     weekly_pct, weekly_resets = _window(rate_limits, "seven_day")
 

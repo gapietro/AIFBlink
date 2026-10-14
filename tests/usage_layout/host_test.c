@@ -169,6 +169,14 @@ int main(void)
 	 */
 	CHECK(63 <= GAUGE_ARC_SZ - 2 * GAUGE_ARC_W,
 	      "the widest percentage this label ever shows clears the arc's stroke");
+	/*
+	 * And the widest dollar amount fmt_usd() writes on a spend page, from
+	 * the same glyph table: '$' 12.4, '9' 12.3, '.' 4.6, 'k' 12.3 px, so
+	 * "$99.9k" is 12.4 + 3 * 12.3 + 4.6 + 12.3 = 66.2 -- call it 70, to
+	 * cover "$100k"'s wider zeros (13.3 px) as well.
+	 */
+	CHECK(70 <= GAUGE_ARC_SZ - 2 * GAUGE_ARC_W,
+	      "the widest dollar amount clears the arc's stroke");
 	/* --- one countdown per gauge --- */
 	CHECK(cd_l.x1 <= cd_r.x0,
 	      "the two gauges' countdowns do not meet in the middle");
@@ -307,6 +315,16 @@ int main(void)
 	      "GAUGE_CD_MAX_W is sized for a bare countdown, not guessed");
 	CHECK(!BUDGET_FITS(GAUGE_CD_MAX_W, "claude  00m 00s"),
 	      "GAUGE_CD_MAX_W no longer has room for a named one");
+	/* The spend page's words in the same slot (fmt.h, SPEND LIMITS). The
+	 * budget was sized for a countdown and was not widened for these, so
+	 * they are checked against it rather than assumed to fit. */
+	CHECK(BUDGET_FITS(GAUGE_CD_MAX_W, "Not reported"),
+	      "the unreported page's line fits under its gauge");
+	CHECK(BUDGET_FITS(GAUGE_CD_MAX_W, "of $99.9k"),
+	      "the widest spend limit fits under its gauge");
+	CHECK((int)strlen("SPEND today") * CHAR_W_MIN <= 110 &&
+	      (int)strlen("ENTERPRISE") * CHAR_W_MIN <= 110,
+	      "the spend captions fit where SESSION 5h and WEEKLY 7d sit");
 	/* Sized for the LONGEST tag the buffer can hold, not the one we happen
 	 * to ship: provider1_tag is char[12], so eleven characters is what has
 	 * to fit without reaching the clock and the status dot in the corners. */

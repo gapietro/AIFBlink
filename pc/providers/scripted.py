@@ -158,12 +158,22 @@ class ScriptedProvider(ProviderParser):
         """
         try:
             age = step.get("age_s", 0)
+            observed_at = self._now() - age
             fields = {k: v for k, v in step.items()
                       if k not in ("at", "age_s", "provider")}
+            # A reset as "this many seconds after the reading", because a
+            # scenario file cannot know the epoch it will run at. Needed by
+            # the first scenario whose countdown is the point -- a spend
+            # period a month long -- and harmless to the rest, which name no
+            # reset at all.
+            for window in ("session", "weekly"):
+                rel = fields.pop(f"{window}_resets_in_s", None)
+                if _is_number(rel):
+                    fields[f"{window}_resets_at"] = observed_at + rel
             return NormalizedUsageFrame(
                 provider=step.get("provider", "claude"),
                 src="scripted",
-                observed_at=self._now() - age,
+                observed_at=observed_at,
                 **fields)
         except TypeError as e:
             print(f"scripted: skipping malformed step ({e})", file=sys.stderr)

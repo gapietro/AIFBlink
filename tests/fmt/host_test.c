@@ -361,6 +361,83 @@ static void test_fmt_toast(void)
 	}
 }
 
+static void usd(double v, const char *want)
+{
+	char got[FMT_USD_MAX];
+
+	fmt_usd(v, got, sizeof(got));
+	if (strcmp(got, want) == 0) {
+		printf("PASS: %-28s %12.3f -> \"%s\"\n", "usd", v, got);
+	} else {
+		printf("FAIL: %-28s %12.3f -> \"%s\" (want \"%s\")\n",
+		       "usd", v, got, want);
+		failures++;
+	}
+}
+
+static void usd_limit(double v, const char *want)
+{
+	char got[FMT_USD_MAX];
+
+	fmt_usd_limit(v, got, sizeof(got));
+	if (strcmp(got, want) == 0) {
+		printf("PASS: %-28s %12.3f -> \"%s\"\n", "usd limit", v, got);
+	} else {
+		printf("FAIL: %-28s %12.3f -> \"%s\" (want \"%s\")\n",
+		       "usd limit", v, got, want);
+		failures++;
+	}
+}
+
+static void test_fmt_spend(void)
+{
+	usd(-1, "--");
+	usd(0.0 / 0.0, "--");
+	usd(0, "$0.00");
+	usd(4.371, "$4.37");
+	usd(9.994, "$9.99");
+	usd(9.995, "$10");
+	usd(314.12, "$314");
+	usd(999.4, "$999");
+	/* Rounding must not carry into the next unit's spelling. */
+	usd(999.6, "$1.0k");
+	usd(12549, "$12.5k");
+	usd(99949, "$99.9k");
+	usd(99950, "$100k");
+	usd(999499, "$999k");
+	usd(999500, "$1.0M");
+	usd(1e15, "$999M");
+	/* Six characters at most: the gauge hollow is measured for that. */
+	{
+		const double v[] = { 4.371, 9.994, 999.4, 99949, 999499,
+				     99949999, 1e15 };
+		char b[FMT_USD_MAX];
+		size_t widest = 0;
+
+		for (unsigned i = 0; i < sizeof(v) / sizeof(v[0]); i++) {
+			fmt_usd(v[i], b, sizeof(b));
+			if (strlen(b) > widest) {
+				widest = strlen(b);
+			}
+		}
+		check_true("no dollar amount is wider than six characters",
+			   widest <= 6);
+	}
+	usd_limit(500, "of $500");
+	usd_limit(-1, "");
+	usd_limit(25000, "of $25.0k");
+	check_true("monthly caption",
+		   strcmp(fmt_spend_caption("monthly"), "SPEND month") == 0);
+	check_true("weekly caption",
+		   strcmp(fmt_spend_caption("weekly"), "SPEND week") == 0);
+	check_true("daily caption",
+		   strcmp(fmt_spend_caption("daily"), "SPEND today") == 0);
+	check_true("unknown period caption",
+		   strcmp(fmt_spend_caption(""), "SPEND") == 0 &&
+		   strcmp(fmt_spend_caption(NULL), "SPEND") == 0 &&
+		   strcmp(fmt_spend_caption("hourly"), "SPEND") == 0);
+}
+
 int main(void)
 {
 	check("unknown", -1, "--");
@@ -434,6 +511,7 @@ int main(void)
 	test_fmt_pips();
 	test_fmt_tone();
 	test_fmt_toast();
+	test_fmt_spend();
 
 	printf("\n%s (%d failure%s)\n", failures ? "FAILURES" : "ALL TESTS PASSED",
 	       failures, failures == 1 ? "" : "s");

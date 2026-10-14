@@ -39,6 +39,12 @@ STATE_FAILED = "failed"
 VALID_STATES = (STATE_UNKNOWN, STATE_IDLE, STATE_RUNNING, STATE_WAITING,
                 STATE_STUCK, STATE_FAILED)
 
+# The allowance a claude frame describes -- see NormalizedUsageFrame.plan.
+PLAN_WINDOWS = ""
+PLAN_SPEND = "spend"
+PLAN_UNREPORTED = "unreported"
+SPEND_PERIODS = ("daily", "weekly", "monthly")
+
 # Worst-first. This is the order the single scalar `state` collapses to when
 # several sessions -- of one provider or of both -- disagree, and the order is
 # a product decision rather than an implementation detail.
@@ -163,6 +169,43 @@ class NormalizedUsageFrame:
     # cwd that sanitises to nothing. Every other source leaves it empty and
     # the board falls back to the count.
     label: str = ""
+    # WHAT KIND OF ALLOWANCE the percentages describe, and so what the gauges
+    # are allowed to call them.
+    #
+    # "" is the shape every source had until 1.4.0: a five-hour session
+    # window and a seven-day one, which is what Claude Pro and Max meter.
+    # An Enterprise account bills by spend instead -- a dollar cap per day,
+    # week or month that its admin sets -- and has no five-hour window at all.
+    # So one claude page has to be able to mean either, and the frame says
+    # which rather than letting a spend percentage travel as `session_pct`
+    # unlabelled, where the board would draw it as "SESSION 5h".
+    #
+    #   PLAN_SPEND       session_pct is the share of the spend limit used,
+    #                    session_resets_at is when its period rolls over, and
+    #                    the weekly window does not exist (UNKNOWN). The
+    #                    dollar figures below ride along when Claude Code
+    #                    had them.
+    #   PLAN_UNREPORTED  An Enterprise or Team login whose usage nothing on
+    #                    this machine can read. Carries no percentage on
+    #                    purpose: the board says so in words instead of
+    #                    drawing two blank gauges that look like a fault.
+    #
+    # See pc/claude_account for which account is signed in and why readings
+    # from before a switch are dropped.
+    plan: str = ""
+    # Dollars, or None when the source did not say. Claude Code sends the
+    # percentage with every response and the dollar figures from a separate
+    # request about five minutes behind, and a machine with
+    # CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC set never sends them at all
+    # (code.claude.com/docs/en/statusline#spend-limit-fields), so a spend
+    # frame without them is ordinary rather than broken.
+    spend_usd: object = None
+    spend_limit_usd: object = None
+    # "daily", "weekly" or "monthly", or "" when not reported.
+    spend_period: str = ""
+    # Which kind of account a PLAN_UNREPORTED frame is about: "enterprise"
+    # or "team". Only ever set on that plan; it is the word the board shows.
+    account: str = ""
 
     def __post_init__(self):
         if self.active_at is None:

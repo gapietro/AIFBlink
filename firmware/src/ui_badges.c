@@ -13,9 +13,25 @@
  * it, and a mis-tap here costs nothing: it shows the neighbouring badge's
  * description, and the right one is a second tap away.
  *
- * Icons are LVGL's built-in symbols (badges.c has the table), coloured by
- * tier once earned -- AIF green for the ten, gold for the three hard ones,
- * violet for the hidden two -- and a dim grey while locked.
+ * Icons are LVGL's built-in symbols (badges.c has the table). An EARNED
+ * badge is a solid tile in its tier's colour -- AIF green for the ten, gold
+ * for the three hard ones, violet for the hidden two -- with the icon cut out
+ * of it in the screen's own dark; a locked one is a dark tile with a dim icon.
+ * The first version told them apart by the icon's colour and a thin outline
+ * alone, and on the owner's washed-out panel (2026-10-14) every tile looked
+ * the same: a filled tile is a difference you can see from across the desk.
+ *
+ * MEMORY, and it is measured, not hoped for. This screen opens over the
+ * settings panel, which is over the gauge screen, and all three live in
+ * LVGL's 30 KB pool (prj.conf, CONFIG_LV_Z_MEM_POOL_SIZE) -- whose failure
+ * mode is a NULL dereference inside LVGL, not an error. The first version
+ * built each cell as a button with a label in it and gave every one of them
+ * its own eight style properties, and on the bench board (2026-10-14) it ran
+ * the pool dry at the fourteenth cell and halted the CPU. So each cell is ONE
+ * object -- a clickable label whose text is the icon -- and everything the
+ * cells have in common is a single shared style; each cell keeps only the
+ * three properties that differ (its fill, border and text colour). tools/panel_render
+ * scene 15 prints the pool's high-water mark with this screen open.
  */
 #include <stdio.h>
 #include <lvgl.h>
@@ -46,6 +62,8 @@
 #define DETAIL_Y2	220
 
 static lv_obj_t *ov;
+static lv_style_t st_cell;
+static bool st_ready;
 static lv_obj_t *cell[BADGE_COUNT];
 static lv_obj_t *name_lbl;
 static lv_obj_t *how_lbl;
@@ -63,19 +81,43 @@ static lv_color_t tier_colour(int i)
 static void paint_cell(int i)
 {
 	bool got = badge_earned(i);
-	lv_obj_t *icon = lv_obj_get_child(cell[i], 0);
 
+	/* The selected cell is marked by a white border, not a wider one: a
+	 * width would be a fourth local property on every cell. */
+	lv_obj_set_style_bg_color(cell[i], got ? tier_colour(i) : COL_PANEL, 0);
 	lv_obj_set_style_border_color(cell[i],
 		i == selected ? COL_TEXT : (got ? tier_colour(i) : COL_TRACK), 0);
-	lv_obj_set_style_border_width(cell[i], i == selected ? 2 : 1, 0);
-	lv_obj_set_style_text_color(icon, got ? tier_colour(i) : COL_LOCKED, 0);
+	lv_obj_set_style_text_color(cell[i], got ? COL_BG : COL_LOCKED, 0);
 	/* A hidden badge shows no icon until it is found: the glyph alone
 	 * would give the game away. */
 	if (badge_get(i)->tier == BADGE_TIER_SECRET && !got) {
-		lv_label_set_text(icon, "?");
+		lv_label_set_text(cell[i], "?");
 	} else {
-		lv_label_set_text(icon, badge_get(i)->icon);
+		lv_label_set_text(cell[i], badge_get(i)->icon);
 	}
+}
+
+/* Everything the fifteen cells share, once. */
+static void cell_style_init(void)
+{
+	if (st_ready) {
+		/* Re-initialised on a later open, so a contrast change between
+		 * two openings is picked up -- reset frees the old entries. */
+		lv_style_reset(&st_cell);
+	}
+	lv_style_init(&st_cell);
+	lv_style_set_width(&st_cell, CELL_W);
+	lv_style_set_height(&st_cell, CELL_H);
+	lv_style_set_bg_color(&st_cell, COL_PANEL);
+	lv_style_set_bg_opa(&st_cell, LV_OPA_COVER);
+	lv_style_set_radius(&st_cell, 10);
+	lv_style_set_border_width(&st_cell, 2);
+	lv_style_set_text_font(&st_cell, &lv_font_montserrat_20);
+	lv_style_set_text_align(&st_cell, LV_TEXT_ALIGN_CENTER);
+	/* A label draws its text from the top; this centres a 22 px line in
+	 * a 48 px cell (less the border). */
+	lv_style_set_pad_top(&st_cell, (CELL_H - 22) / 2 - 2);
+	st_ready = true;
 }
 
 void ui_badges_select(int i)
@@ -86,8 +128,11 @@ void ui_badges_select(int i)
 		return;
 	}
 	selected = i;
-	if (was >= 0) {
+	if (was >= 0 && cell[was]) {
 		paint_cell(was);
+	}
+	if (cell[i] == NULL) {
+		return;
 	}
 	paint_cell(i);
 	lv_label_set_text(name_lbl, badge_title(i));
@@ -158,25 +203,23 @@ void ui_badges_open(lv_obj_t *parent)
 	lv_obj_add_event_cb(ov, gesture_cb, LV_EVENT_GESTURE, NULL);
 	lv_obj_center(ov);
 
-	/* The back control, drawn as the settings panel draws its own. */
-	lv_obj_t *back = lv_button_create(ov);
+	/* The back control: the settings panel's 60 x 36, as one clickable
+	 * label rather than a button with a label in it -- see MEMORY. */
+	lv_obj_t *back = lv_label_create(ov);
 
+	lv_label_set_text(back, LV_SYMBOL_LEFT);
 	lv_obj_set_size(back, 60, 36);
-	lv_obj_align(back, LV_ALIGN_TOP_LEFT, 6, 2);
+	lv_obj_set_pos(back, 6, 2);
 	lv_obj_set_style_bg_color(back, COL_PANEL, 0);
 	lv_obj_set_style_bg_opa(back, LV_OPA_COVER, 0);
-	lv_obj_set_style_border_width(back, 0, 0);
 	lv_obj_set_style_radius(back, 9, 0);
-	lv_obj_set_style_shadow_width(back, 0, 0);
+	lv_obj_set_style_text_color(back, COL_DIM, 0);
+	lv_obj_set_style_text_align(back, LV_TEXT_ALIGN_CENTER, 0);
+	lv_obj_set_style_pad_top(back, 10, 0);
+	lv_obj_add_flag(back, LV_OBJ_FLAG_CLICKABLE);
 	lv_obj_add_flag(back, LV_OBJ_FLAG_GESTURE_BUBBLE);
 	lv_obj_set_ext_click_area(back, 10);
 	lv_obj_add_event_cb(back, back_cb, LV_EVENT_CLICKED, NULL);
-
-	lv_obj_t *chev = lv_label_create(back);
-
-	lv_label_set_text(chev, LV_SYMBOL_LEFT);
-	lv_obj_set_style_text_color(chev, COL_DIM, 0);
-	lv_obj_center(chev);
 
 	lv_obj_t *title = lv_label_create(ov);
 
@@ -201,28 +244,21 @@ void ui_badges_open(lv_obj_t *parent)
 	lv_obj_set_style_border_width(rule, 0, 0);
 	lv_obj_set_style_radius(rule, 0, 0);
 
+	cell_style_init();
 	for (int i = 0; i < BADGE_COUNT; i++) {
-		lv_obj_t *c = lv_button_create(ov);
+		lv_obj_t *c = lv_label_create(ov);
 
+		if (c == NULL) {
+			break;	/* the pool said no; show what fitted */
+		}
 		cell[i] = c;
-		lv_obj_set_size(c, CELL_W, CELL_H);
-		lv_obj_align(c, LV_ALIGN_TOP_LEFT,
-			     GRID_X + (i % GRID_COLS) * PITCH_X,
-			     GRID_Y + (i / GRID_COLS) * PITCH_Y);
-		lv_obj_set_style_bg_color(c, COL_PANEL, 0);
-		lv_obj_set_style_bg_opa(c, LV_OPA_COVER, 0);
-		lv_obj_set_style_radius(c, 10, 0);
-		lv_obj_set_style_shadow_width(c, 0, 0);
-		lv_obj_set_style_pad_all(c, 0, 0);
-		lv_obj_clear_flag(c, LV_OBJ_FLAG_SCROLLABLE);
+		lv_obj_add_style(c, &st_cell, 0);
+		lv_obj_set_pos(c, GRID_X + (i % GRID_COLS) * PITCH_X,
+			       GRID_Y + (i / GRID_COLS) * PITCH_Y);
+		lv_obj_add_flag(c, LV_OBJ_FLAG_CLICKABLE);
 		lv_obj_clear_flag(c, LV_OBJ_FLAG_GESTURE_BUBBLE);
 		lv_obj_add_event_cb(c, cell_cb, LV_EVENT_CLICKED,
 				    (void *)(intptr_t)i);
-
-		lv_obj_t *icon = lv_label_create(c);
-
-		lv_obj_set_style_text_font(icon, &lv_font_montserrat_20, 0);
-		lv_obj_center(icon);
 		paint_cell(i);
 	}
 

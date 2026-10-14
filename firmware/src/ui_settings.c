@@ -39,6 +39,7 @@
 #include "theme.h"
 #include "badges.h"
 #include "ui_badges.h"
+#include <lvgl_mem.h>
 
 /*
  * The AI Foundry palette (2026-10-14), taken from the AIF logo itself: its
@@ -1717,6 +1718,18 @@ static void show_badges(lv_event_t *e)
 		return;
 	}
 	ui_badges_open(panel);
+	/*
+	 * The pool, as this screen leaves it: the deepest stack of screens on
+	 * the board (gauges, settings, badges) and the one that once ran it dry
+	 * -- see MEMORY in ui_badges.c. Printed so a fleet transcript or a desk
+	 * log shows how much room is left, rather than anyone guessing again.
+	 */
+	struct sys_memory_stats st;
+
+	lvgl_heap_stats(&st);
+	printk("[mem] lvgl pool with badges open: %u used, %u free, peak %u\n",
+	       (unsigned)st.allocated_bytes, (unsigned)st.free_bytes,
+	       (unsigned)st.max_allocated_bytes);
 }
 
 static void show_bright(lv_event_t *e)
@@ -1816,6 +1829,17 @@ static void do_open(void (*pump)(void))
 	 * usage_view_deinit() deletes the gauge screen before provisioning. */
 	build_panel(lv_screen_active());
 	lv_obj_update_layout(panel);
+	{
+		/* The pool with the panel built and not yet drawn -- see MEMORY
+		 * in ui_badges.c. */
+		struct sys_memory_stats st;
+
+		lvgl_heap_stats(&st);
+		printk("[mem] lvgl pool with settings open: %u used, %u free,"
+		       " peak %u\n", (unsigned)st.allocated_bytes,
+		       (unsigned)st.free_bytes,
+		       (unsigned)st.max_allocated_bytes);
+	}
 	ui_slide_freeze(false);
 
 	/*

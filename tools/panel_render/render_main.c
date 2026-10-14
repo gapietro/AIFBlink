@@ -253,8 +253,9 @@ int main(int argc, char **argv)
 		  * hard badge selected to show its rule. */
 		usage_view_set_provider1("claude");
 		usage_view_update(27.0, 13231, 42.0, 598831);
-		badges_set_mask(0x03FF & ~(1u << 9) & ~(1u << 7));
-		badges_set_mask(badges_mask() | (1u << 11) | (1u << 13));
+		badges_set_mask(argc > 4 ? (uint32_t)strtoul(argv[4], NULL, 0)
+				: ((0x03FF & ~(1u << 9) & ~(1u << 7))
+				   | (1u << 11) | (1u << 13)));
 		ui_badges_open(lv_screen_active());
 		ui_badges_select(10);
 		break;

@@ -16,6 +16,7 @@
 #include "cfg_store.h"
 #include "backlight.h"
 #include "theme.h"
+#include <lvgl_mem.h>
 #include "net_wifi.h"
 #include "net_time.h"
 #include "portal.h"
@@ -1488,6 +1489,16 @@ static void run_usb(void)
 	/* Same as run_standalone: drop anything latched before this loop
 	 * existed to service it. See ui_settings.h. */
 	ui_settings_drop_pending();
+	{
+		/* The pool as the gauge screen leaves it, once per boot: the
+		 * baseline every other screen stacks on. See ui_badges.c. */
+		struct sys_memory_stats st;
+
+		lvgl_heap_stats(&st);
+		printk("[mem] lvgl pool at the gauges: %u used, %u free, peak %u\n",
+		       (unsigned)st.allocated_bytes, (unsigned)st.free_bytes,
+		       (unsigned)st.max_allocated_bytes);
+	}
 	if (theme_take_reopen()) {
 		ui_settings_reopen_display();	/* a contrast change brought us here */
 	}

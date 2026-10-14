@@ -243,12 +243,12 @@ int main(void)
 	 * here rather than typed in, because the number that was typed in was
 	 * wrong by 2 px in the direction that matters.
 	 *
-	 * "BLINK" at lv_font_montserrat_14, whose advances LVGL rounds to
-	 * whole pixels as (adv_w + 8) >> 4: B 11 + L 8 + I 4 + N 11 + K 10 =
-	 * 44, plus the letter_space of 2 that usage_view.c sets, in each of
-	 * the four gaps = 52. Centred on SCR_MID_X, so it begins at 134 -- not
-	 * the 136 an earlier comment claimed from a tracking value the code
-	 * does not use.
+	 * "AIF BLINK" at lv_font_montserrat_14, whose advances LVGL rounds to
+	 * whole pixels as (adv_w + 8) >> 4: 71 px of glyphs plus the
+	 * letter_space of 2 that usage_view.c sets, in each of the eight gaps
+	 * = 87 (the derivation is beside BRAND_W). Centred on SCR_MID_X, so it
+	 * begins at 117. It was "BLINK", 52 px, beginning at 134, until this
+	 * fork was branded for the AI Foundry team.
 	 */
 	CHECK(pips.x0 >= SCR_RIGHT_MARGIN_MIN,
 	      "the pip row is not flush against the left bezel");
@@ -256,8 +256,8 @@ int main(void)
 	      "a full pip row clears the wall");
 	CHECK(PIP_WALL_X <= brand.x0,
 	      "the wall is left of the brand's real left edge");
-	EXPECT_EQ(brand.x0, 134);
-	EXPECT_EQ(PIP_MAX, 11);
+	EXPECT_EQ(brand.x0, 117);
+	EXPECT_EQ(PIP_MAX, 9);
 	/*
 	 * Counts mode: three groups of pip + gap + one digit, with a gap
 	 * between them. Asserted for the SINGLE-digit case only, which is the

@@ -31,15 +31,17 @@ static int failures;
 
 struct swatch { const char *name; unsigned rgb; };
 
-/* Kept in step with firmware/src/usage_view.c by the check at the end. */
+/* Kept in step with firmware/src/usage_view.c by the check at the end. The
+ * background, the quiet text and the grey are the AI Foundry palette
+ * (2026-10-14); the severity ramp is the one this file was written for. */
 static const struct swatch pal[] = {
-	{ "COL_BG",      0x0E1116 },
+	{ "COL_BG",      0x022D41 },
 	{ "COL_TEXT",    0xE6E8EB },
-	{ "COL_DIM",     0x8A9199 },
+	{ "COL_DIM",     0x9DB3C1 },
 	{ "COL_GREEN",  0x0DA243 },
 	{ "COL_AMBER",  0xBA8107 },
 	{ "COL_RED",  0xFF1900 },
-	{ "COL_GREY",    0x6B7280 },
+	{ "COL_GREY",    0x7D93A6 },
 	{ "COL_OTHER",   0x4387DF },
 };
 #define N (int)(sizeof(pal) / sizeof(pal[0]))

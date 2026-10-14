@@ -50,23 +50,27 @@
 #define TITLE_Y			6
 #define HDR_ROW_Y		8
 #define DOT_SZ			12
-#define BRAND_TEXT		"BLINK"
+#define BRAND_TEXT		"AIF BLINK"
 /*
  * How wide BRAND_TEXT actually draws, because the pip row to its left is
  * positioned against it and a guess is not good enough.
  *
+ * "AIF BLINK" is this fork's wordmark: the AI Foundry team's units, branded
+ * for it (2026-10-14). It was "BLINK", 52 px.
+ *
  * lv_font_montserrat_14 stores each advance in 1/16 px and LVGL rounds it to
- * whole pixels as (adv_w + 8) >> 4. B 11 + L 8 + I 4 + N 11 + K 10 = 44, plus
- * the letter_space of 2 that usage_view.c sets on the label, in each of the
- * four gaps between five letters: 52. Centred on SCR_MID_X, so the wordmark
- * begins at 134.
+ * whole pixels as (adv_w + 8) >> 4. A 10 + I 4 + F 8 + space 4 + B 11 + L 8 +
+ * I 4 + N 11 + K 10 = 71, plus the letter_space of 2 that usage_view.c sets on
+ * the label, in each of the eight gaps between nine characters: 87. Centred
+ * on SCR_MID_X, so the wordmark begins at 117 (160 - 87 / 2, rounded the way
+ * LVGL's TOP_MID alignment rounds).
  *
  * An earlier comment here said 136, worked out from ".09em tracking" -- a
  * value the code has never used. Two pixels, in the direction that eats the
  * pip row's clearance, which is why this is now a constant the layout test
  * asserts rather than prose nobody re-derives.
  */
-#define BRAND_W			52
+#define BRAND_W			87
 
 /*
  * The clock sits under the brand, and it does NOT own a row of its own.
@@ -92,7 +96,8 @@
  * Only the right bound is still a measurement, and BRAND_W above carries it
  * with its derivation. The left bound is just the bezel.
  *
- * PIP_MAX is geometry, not policy: eleven fit. The display switches to counts
+ * PIP_MAX is geometry, not policy: nine fit against the AIF BLINK wordmark
+ * (eleven did against the shorter BLINK). The display switches to counts
  * at SIX, which is a claim about reading and not about width -- six pips were
  * checked against a rendered panel and read as six; nobody has checked eight.
  * The extra room went to making counts mode roomier rather than to cramming
@@ -108,8 +113,13 @@
 #define PIP_SZ			8
 #define PIP_PITCH		11
 #define PIP_X0			10
-#define PIP_WALL_X		130
-#define PIP_MAX			11
+/*
+ * Four pixels clear of the wordmark's left edge at 117. Counts mode's budget
+ * of four groups ends at 108 (below), so the wider wordmark cost the row its
+ * spare room and none of its groups.
+ */
+#define PIP_WALL_X		113
+#define PIP_MAX			9
 
 /*
  * An 8 px pip on the 12 px health dot's centre line, written as the

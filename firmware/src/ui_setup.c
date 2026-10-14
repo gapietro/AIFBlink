@@ -13,19 +13,20 @@
 #include "ui_setup.h"
 #include "net_wifi.h"
 #include "fmt.h"
+#include "usage_layout.h"	/* BRAND_TEXT */
 
 /* Backgrounds are deliberately two distinct values so the QR panel reads as its
  * own zone rather than blending into the screen.
  */
-#define COL_BG		lv_color_hex(0x0E1116)	/* screen */
-#define COL_PANEL	lv_color_hex(0x05070A)	/* QR panel -- clearly darker */
-#define COL_SEAM	lv_color_hex(0x2ECC71)	/* divider */
+#define COL_BG		lv_color_hex(0x022D41)	/* screen: the AIF logo's navy */
+#define COL_PANEL	lv_color_hex(0x011C29)	/* QR panel -- clearly darker */
+#define COL_SEAM	lv_color_hex(0x6AC251)	/* divider */
 #define COL_TEXT	lv_color_hex(0xE6E8EB)
-#define COL_DIM		lv_color_hex(0x8A9199)
-#define COL_GREEN	lv_color_hex(0x2ECC71)
+#define COL_DIM		lv_color_hex(0x9DB3C1)
+#define COL_GREEN	lv_color_hex(0x6AC251)	/* the AIF logo's green */
 #define COL_GREEN_INK	lv_color_hex(0x06210F)
-#define COL_TRACK	lv_color_hex(0x2A313B)
-#define COL_PILLBG	lv_color_hex(0x0F2A1B)
+#define COL_TRACK	lv_color_hex(0x1B4A60)
+#define COL_PILLBG	lv_color_hex(0x0F3B2E)
 #define COL_RED		lv_color_hex(0xE74C3C)
 
 struct step {
@@ -142,8 +143,8 @@ void ui_setup_show(void)
 
 	brand = lv_label_create(scr);
 
-	lv_label_set_text(brand, "BLINK");
-	lv_obj_set_style_text_color(brand, COL_DIM, 0);
+	lv_label_set_text(brand, BRAND_TEXT);
+	lv_obj_set_style_text_color(brand, COL_GREEN, 0);
 	lv_obj_set_style_text_letter_space(brand, 2, 0);
 	lv_obj_align(brand, LV_ALIGN_TOP_LEFT, 16, 14);
 

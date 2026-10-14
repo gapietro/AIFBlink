@@ -16,11 +16,17 @@
 #include "cfg_store.h"
 
 /* Severity colours: green under 60%, amber approaching, red near the limit. */
-#define COL_BG		lv_color_hex(0x0E1116)
-#define COL_PANEL	lv_color_hex(0x05070A)
-#define COL_TRACK	lv_color_hex(0x272C34)
+/*
+ * The AI Foundry palette (2026-10-14): background, panel, track and the quiet
+ * text are taken from the AIF logo's navy rather than the neutral near-black
+ * they were. The severity ramp below is unchanged -- it is re-checked against
+ * this background by tests/usage_contrast and still clears every rule there.
+ */
+#define COL_BG		lv_color_hex(0x022D41)
+#define COL_PANEL	lv_color_hex(0x011C29)
+#define COL_TRACK	lv_color_hex(0x1B4A60)
 #define COL_TEXT	lv_color_hex(0xE6E8EB)
-#define COL_DIM		lv_color_hex(0x8A9199)
+#define COL_DIM		lv_color_hex(0x9DB3C1)
 /*
  * The severity ramp: green, amber, red -- and all three sit inside a 1.16x
  * luminance band on purpose.
@@ -66,7 +72,13 @@
  * 3:1 minimum for a graphic element -- and these are the swipe chevrons, which
  * exist only because nobody discovered the gestures without them. An
  * affordance too dim to notice is not an affordance. */
-#define COL_GREY	lv_color_hex(0x6B7280)
+#define COL_GREY	lv_color_hex(0x7D93A6)
+/*
+ * The wordmark's colour: the AIF logo's green. Not a severity colour and not
+ * held to the severity rules -- it is the one piece of identity on the screen,
+ * and it sits in the header where nothing else is green.
+ */
+#define COL_BRAND	lv_color_hex(0x6AC251)
 
 /*
  * Provider identity colours.
@@ -801,7 +813,7 @@ void usage_view_init(void)
 	lv_obj_t *title = lv_label_create(scr);
 
 	lv_label_set_text(title, BRAND_TEXT);
-	lv_obj_set_style_text_color(title, COL_DIM, 0);
+	lv_obj_set_style_text_color(title, COL_BRAND, 0);
 	lv_obj_set_style_text_letter_space(title, 2, 0);
 	lv_obj_align(title, LV_ALIGN_TOP_MID, 0, TITLE_Y);
 

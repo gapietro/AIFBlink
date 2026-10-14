@@ -11,9 +11,12 @@ units"). The picture is BUILT here rather than drawn by hand so the exact
 screen can be regenerated from the logo in docs/img/brand/aif/ -- and so a
 change of wording is a one-line edit, not a trip to an image editor.
 
-The background is the logo's own navy, sampled from its corner rather than
-typed in, which is also the gauge screen's COL_BG: the startup screen hands
-over to the gauges without the panel changing colour underneath.
+The background is the gauge screen's COL_BG, read out of
+firmware/src/usage_view.c rather than typed in again, so the startup screen
+hands over to the gauges without the panel changing colour underneath. That
+is darker than the logo's own navy -- the cheap panel washed the logo navy
+out (2026-10-14) -- so the logo's navy is recoloured to it, including the
+anvil, which is the same navy showing through.
 
 Fonts: Avenir Next where macOS has it, the closest thing to the panel's
 Montserrat on this Mac, and Pillow's built-in face elsewhere -- legible, if
@@ -21,6 +24,7 @@ plainer, on a Linux runner that will never see the panel anyway.
 """
 import argparse
 import os
+import re
 import sys
 
 from PIL import Image, ImageDraw, ImageFont
@@ -35,6 +39,36 @@ MARK = 150                      # px, square, leaving room for two lines
 # rest is navy margin, which the canvas supplies at the panel's size.
 MARK_BOX = (150, 140, 880, 880)
 AVENIR = "/System/Library/Fonts/Avenir Next.ttc"
+USAGE_VIEW = os.path.join(ROOT, "firmware", "src", "usage_view.c")
+# How far from the logo's navy a pixel may be and still be moved with it, in
+# RGB distance. The anti-aliased rim between navy and green is a blend of the
+# two, so it moves part of the way -- in proportion to how navy it is --
+# rather than being left as a halo of the old colour round the mark.
+NAVY_REACH = 120.0
+
+
+def panel_bg():
+    """COL_BG from usage_view.c, as an (r, g, b) tuple."""
+    with open(USAGE_VIEW, encoding="utf-8") as f:
+        m = re.search(r"#define COL_BG\s+lv_color_hex\(0x([0-9A-Fa-f]{6})\)",
+                      f.read())
+    v = int(m.group(1), 16)
+    return (v >> 16 & 0xFF, v >> 8 & 0xFF, v & 0xFF)
+
+
+def recolour(img, frm, to):
+    """Move every pixel near `frm` towards `to`, by how near it is."""
+    shift = [t - f for f, t in zip(frm, to)]
+    px = img.load()
+    for y in range(img.height):
+        for x in range(img.width):
+            r, g, b, a = px[x, y]
+            d = ((r - frm[0]) ** 2 + (g - frm[1]) ** 2 + (b - frm[2]) ** 2) ** .5
+            w = max(0.0, 1.0 - d / NAVY_REACH)
+            if w:
+                px[x, y] = (round(r + shift[0] * w), round(g + shift[1] * w),
+                            round(b + shift[2] * w), a)
+    return img
 
 
 def font(size, demi):
@@ -55,8 +89,10 @@ def centred(draw, y, text, face, fill, spacing=0):
 def build(logo_path=LOGO):
     logo = Image.open(logo_path).convert("RGBA")
     navy = logo.getpixel((0, 0))[:3]
+    bg = panel_bg()
     mark = logo.crop(MARK_BOX).resize((MARK, MARK), Image.LANCZOS)
-    canvas = Image.new("RGB", (W, H), navy)
+    mark = recolour(mark, navy, bg)
+    canvas = Image.new("RGB", (W, H), bg)
     canvas.paste(mark, ((W - MARK) // 2, 14), mark)
     d = ImageDraw.Draw(canvas)
     centred(d, 170, "AI Foundry", font(22, True), WHITE)

@@ -18,15 +18,15 @@
 /* Backgrounds are deliberately two distinct values so the QR panel reads as its
  * own zone rather than blending into the screen.
  */
-#define COL_BG		lv_color_hex(0x022D41)	/* screen: the AIF logo's navy */
-#define COL_PANEL	lv_color_hex(0x011C29)	/* QR panel -- clearly darker */
+#define COL_BG		lv_color_hex(0x011824)	/* screen: darker than the AIF navy, see usage_view.c */
+#define COL_PANEL	lv_color_hex(0x000F17)	/* QR panel -- clearly darker */
 #define COL_SEAM	lv_color_hex(0x6AC251)	/* divider */
-#define COL_TEXT	lv_color_hex(0xE6E8EB)
-#define COL_DIM		lv_color_hex(0x9DB3C1)
+#define COL_TEXT	lv_color_hex(0xFFFFFF)
+#define COL_DIM		lv_color_hex(0xB4C6D2)
 #define COL_GREEN	lv_color_hex(0x6AC251)	/* the AIF logo's green */
 #define COL_GREEN_INK	lv_color_hex(0x06210F)
-#define COL_TRACK	lv_color_hex(0x1B4A60)
-#define COL_PILLBG	lv_color_hex(0x0F3B2E)
+#define COL_TRACK	lv_color_hex(0x143B4F)
+#define COL_PILLBG	lv_color_hex(0x0C3326)
 #define COL_RED		lv_color_hex(0xE74C3C)
 
 struct step {

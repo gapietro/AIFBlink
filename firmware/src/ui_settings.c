@@ -42,18 +42,25 @@
  * navy is the background and its green the accent. Severity keeps its own
  * red and amber -- they mean something, and the green accent here is
  * decoration, which is why it is the brand's green and not usage_view.c's
- * severity green. See usage_view.c for the gauge screen's half.
+ * severity green. See usage_view.c for the gauge screen's half, and for why
+ * the background is darker than the logo's navy.
+ *
+ * Contrast is pushed further here than on the gauge screen, at the owner's
+ * request after seeing it on the panel: this screen is all small text, and
+ * the cheap glass washes small text out first. Text is pure white, the quiet
+ * text a lighter blue-grey (10.3:1 rather than 6.6:1), and the cards stand
+ * further off the background so each row reads as its own control.
  */
-#define COL_BG		lv_color_hex(0x022D41)
-#define COL_TRACK	lv_color_hex(0x1B4A60)
-#define COL_TEXT	lv_color_hex(0xE6E8EB)
-#define COL_DIM		lv_color_hex(0x9DB3C1)
+#define COL_BG		lv_color_hex(0x011824)
+#define COL_TRACK	lv_color_hex(0x143B4F)
+#define COL_TEXT	lv_color_hex(0xFFFFFF)
+#define COL_DIM		lv_color_hex(0xB4C6D2)
 #define COL_RED		lv_color_hex(0xE74C3C)
 #define COL_GREEN	lv_color_hex(0x6AC251)
 #define COL_AMBER	lv_color_hex(0xF1C40F)
-#define COL_PANEL	lv_color_hex(0x0A3A52)	/* card fill, sits above COL_BG */
-#define COL_LINE	lv_color_hex(0x124560)	/* the full-width section rules */
-#define COL_DANGER_BG	lv_color_hex(0x2B2230)	/* factory tile: red-tinted, not solid red */
+#define COL_PANEL	lv_color_hex(0x0C3347)	/* card fill, sits above COL_BG */
+#define COL_LINE	lv_color_hex(0x1A4A62)	/* the full-width section rules */
+#define COL_DANGER_BG	lv_color_hex(0x2A1A22)	/* factory tile: red-tinted, not solid red */
 #define COL_DANGER_BD	lv_color_hex(0x7A2B23)
 
 /*

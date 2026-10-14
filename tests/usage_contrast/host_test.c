@@ -35,7 +35,7 @@ struct swatch { const char *name; unsigned rgb; };
  * background, the quiet text and the grey are the AI Foundry palette
  * (2026-10-14); the severity ramp is the one this file was written for. */
 static const struct swatch pal[] = {
-	{ "COL_BG",      0x022D41 },
+	{ "COL_BG",      0x011824 },
 	{ "COL_TEXT",    0xE6E8EB },
 	{ "COL_DIM",     0x9DB3C1 },
 	{ "COL_GREEN",  0x0DA243 },

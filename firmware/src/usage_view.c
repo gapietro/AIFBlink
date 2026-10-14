@@ -18,13 +18,20 @@
 /* Severity colours: green under 60%, amber approaching, red near the limit. */
 /*
  * The AI Foundry palette (2026-10-14): background, panel, track and the quiet
- * text are taken from the AIF logo's navy rather than the neutral near-black
- * they were. The severity ramp below is unchanged -- it is re-checked against
- * this background by tests/usage_contrast and still clears every rule there.
+ * text are navies from the AIF logo rather than the neutral near-black they
+ * were. The severity ramp below is unchanged -- it is re-checked against this
+ * background by tests/usage_contrast and still clears every rule there.
+ *
+ * The background is DARKER than the logo's own navy (#022D41), on the owner's
+ * look at the real panel: the CYD's cheap TN glass lifts a mid navy towards
+ * grey-blue and the screen read washed out. #011824 keeps the hue and buys
+ * contrast everywhere -- text 11.8:1 -> 14.8:1, the red ring 3.7:1 -> 4.7:1.
+ * tools/make_aif_startup.py recolours the logo's navy to this, so the startup
+ * screen still hands over without the panel changing colour.
  */
-#define COL_BG		lv_color_hex(0x022D41)
-#define COL_PANEL	lv_color_hex(0x011C29)
-#define COL_TRACK	lv_color_hex(0x1B4A60)
+#define COL_BG		lv_color_hex(0x011824)
+#define COL_PANEL	lv_color_hex(0x000F17)
+#define COL_TRACK	lv_color_hex(0x143B4F)
 #define COL_TEXT	lv_color_hex(0xE6E8EB)
 #define COL_DIM		lv_color_hex(0x9DB3C1)
 /*

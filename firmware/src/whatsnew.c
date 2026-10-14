@@ -30,6 +30,7 @@ static const struct {
 	const char *version;
 	const char *lines;
 } NOTES[] = {
+	{ "1.5.1", "Darker, easier to read" },
 	{ "1.5.0", "Themed for the AI Foundry team" },
 	{ "1.4.0", "Shows Enterprise spend limits" },
 	{ "1.3.5", "Clearer messages from the app" },

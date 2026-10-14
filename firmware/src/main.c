@@ -1764,6 +1764,7 @@ int main(void)
 
 	cfg_init();
 	theme_init();	/* before any screen is built: they take its colours */
+	usage_view_set_egg_cb(proto_send_egg);	/* the wordmark taps, see ui_badges.c */
 	ota_boot_begin();	/* unconfirmed image? start the confirm clock */
 	/* ...and from here the boot screen's own wait loops feed it too; they
 	 * block for seconds against a 30 s window. */

@@ -62,4 +62,8 @@ bool proto_ota_staged(void);
  */
 void proto_send_pref(void);
 
+/* A hidden badge the board found by itself -- see ui_badges.c and
+ * pc/badges.EGGS. */
+void proto_send_egg(const char *id);
+
 #endif /* PROTO_H */

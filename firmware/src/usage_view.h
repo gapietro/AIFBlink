@@ -280,4 +280,16 @@ void usage_view_set_plan(const char *tag, const char *kind,
 			 const char *period, const char *acct,
 			 double usd, double lim);
 
+/*
+ * A one-off card on the gauges: "Badge earned: Night Owl". Shown like the
+ * session popups, and refused when they are (asleep, or under CONNECTING).
+ */
+void usage_view_announce(const char *text);
+
+/*
+ * Who to tell when the board finds a hidden badge itself (the wordmark taps).
+ * main.c points it at proto_send_egg(); the panel renderer leaves it unset.
+ */
+void usage_view_set_egg_cb(void (*fn)(const char *id));
+
 #endif /* USAGE_VIEW_H */

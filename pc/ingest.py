@@ -14,8 +14,8 @@ able to stop it.
 import sys
 import time
 
-from pc import (claude_account, cowork_audit, desktop_idb, normalizer,
-                protocol, weekly_anchor)
+from pc import (badges, claude_account, cowork_audit, desktop_idb,
+                normalizer, protocol, weekly_anchor)
 from pc.providers import base
 from pc.providers.claude_cli import ClaudeCliProvider
 from pc.providers.claude_desktop import ClaudeDesktopProvider
@@ -72,7 +72,7 @@ def default_providers():
 
 class IngestionBus:
     def __init__(self, providers=None, preferred_provider="claude",
-                 now=time.time, account=None):
+                 now=time.time, account=None, badge_book=None):
         # Which Claude account is signed in (pc/claude_account). Watched only
         # with the real provider set: a scenario replaces every source on the
         # machine precisely so that this desk's own state cannot change what
@@ -80,6 +80,15 @@ class IngestionBus:
         if account is None and providers is None:
             account = claude_account.AccountWatch()
         self._account = account
+        # The badge collection (pc/badges), on the same terms: a scenario's
+        # invented usage must not earn anybody anything.
+        # False opts out explicitly: `blink status --wire` builds a real bus
+        # for one poll, and a second process writing badges.json beside the
+        # daemon would race it.
+        if badge_book is None and providers is None:
+            badge_book = badges.BadgeBook()
+        self._badges = badge_book or None
+        self._new_badges = []
         self._providers = (default_providers() if providers is None
                            else list(providers))
         self._preferred = preferred_provider
@@ -321,11 +330,38 @@ class IngestionBus:
             return None
         msg = protocol.frame_to_usage(primary, now, secondary)
         self._plan = protocol.plan_for(primary, secondary)
+        if self._badges is not None:
+            try:
+                self._new_badges.extend(
+                    self._badges.observe(primary, secondary, now))
+            except Exception as e:
+                # A game must never cost the gauges a poll.
+                print(f"[badges] skipped a poll: {e}", file=sys.stderr)
         # Against the state the message actually carries, which is not always
         # the primary frame's own -- see _pair_from.
         self._session_pair = _pair_from(
             primary, secondary, msg.get("state", base.STATE_UNKNOWN))
         return msg
+
+    def badges_msg(self):
+        """The `badges` message -- every badge earned so far -- or None on a
+        bus with no collection (a scenario, a test)."""
+        if self._badges is None:
+            return None
+        return protocol.badges(self._badges.mask())
+
+    def take_new_badges(self):
+        """Badges earned since the last call, as wire indices, for the
+        board to announce. Taken, not peeked: each is announced once."""
+        out = [badges.INDEX[b] for b in self._new_badges]
+        self._new_badges = []
+        return out
+
+    def record_egg(self, egg_id):
+        """The board found a hidden badge (protocol `egg`)."""
+        if self._badges is None or not isinstance(egg_id, str):
+            return
+        self._new_badges.extend(self._badges.record_egg(egg_id, self._now()))
 
     def plan_msg(self):
         """The `plan` message for the pair the last poll() chose.
@@ -384,6 +420,12 @@ class _BusFetch:
 
     def plan_msg(self):
         return self._bus.plan_msg()
+
+    def badges_msg(self):
+        return self._bus.badges_msg()
+
+    def take_new_badges(self):
+        return self._bus.take_new_badges()
 
 
 # Which count describes which state. STATE_FAILED reads n_stuck because that

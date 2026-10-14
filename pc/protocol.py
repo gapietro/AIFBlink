@@ -651,6 +651,23 @@ def hide_plan_for_fw(msg, plan_msg, board_fw):
     return out
 
 
+# ------------------------------------------------------------------- badges
+
+def badges(mask: int) -> dict:
+    """Every badge earned on this computer, as a bitmask (pc/badges.BADGES:
+    bit N is badge N). Its own message, on change and on every connect, like
+    `plan` -- the usage line has no room, and this changes a few times a
+    month. Older firmware ignores an unknown type."""
+    return {"t": "badges", "v": VERSION, "got": int(mask)}
+
+
+def badge_earned(index: int) -> dict:
+    """One badge, earned just now, for the board to announce. Separate from
+    `badges` so a reconnect -- which re-sends the whole collection -- does
+    not announce everything again."""
+    return {"t": "badge", "v": VERSION, "id": int(index)}
+
+
 def _active_age(frame, secondary, now_epoch: float) -> int:
     """The age of the freshest contact on the bus, or -1 when nothing says.
 

@@ -37,6 +37,8 @@
 #include "upd_row.h"
 #include "usage_view.h"
 #include "theme.h"
+#include "badges.h"
+#include "ui_badges.h"
 
 /*
  * The AI Foundry palette (2026-10-14), taken from the AIF logo itself: its
@@ -1708,6 +1710,15 @@ static void contrast_cb(lv_event_t *e)
  * The stops gave up height, not width: 56 x 64 is 10.0 x 11.4 mm, still over
  * a fingertip, and the contrast buttons are 142 x 56, 25.3 x 10.0 mm.
  */
+static void show_badges(lv_event_t *e)
+{
+	(void)e;
+	if (bright_ov || confirm) {
+		return;
+	}
+	ui_badges_open(panel);
+}
+
 static void show_bright(lv_event_t *e)
 {
 	ARG_UNUSED(e);
@@ -1920,9 +1931,17 @@ static void do_close(void (*pump)(void))
 	upd_lbl = NULL;
 	pct_lbl = NULL;
 	bright_big = NULL;
+	con_lbl = NULL;
 	for (int i = 0; i < BRIGHT_STOPS; i++) {
 		seg[i] = NULL;
 	}
+	for (int i = 0; i < THEME_LEVELS; i++) {
+		con_btn[i] = NULL;
+		con_txt[i] = NULL;
+	}
+	/* The Badges screen keeps its own pointers; it lets go of them here,
+	 * before the delete below takes its objects with the panel. */
+	ui_badges_close();
 	lv_obj_del(panel);	/* deletes confirm and any overlay with it */
 	panel = NULL;
 	confirm = NULL;
@@ -2032,7 +2051,7 @@ static void back_cb(lv_event_t *e)
 	 * one is unreachable while it is up -- but the extended touch area
 	 * reaches past the overlay's edge, and a press landing there must not
 	 * close the panel out from under it. */
-	if (confirm == NULL && bright_ov == NULL) {
+	if (confirm == NULL && bright_ov == NULL && !ui_badges_is_open()) {
 		close_panel();
 	}
 }
@@ -2040,7 +2059,7 @@ static void back_cb(lv_event_t *e)
 static void panel_gesture_cb(lv_event_t *e)
 {
 	ARG_UNUSED(e);
-	if (confirm == NULL && bright_ov == NULL &&
+	if (confirm == NULL && bright_ov == NULL && !ui_badges_is_open() &&
 	    lv_indev_get_gesture_dir(lv_indev_active()) == LV_DIR_RIGHT) {
 		close_panel();
 	}
@@ -2361,9 +2380,14 @@ static void build_panel(lv_obj_t *parent_scr)
  * device needs to give -- both of them things you read rather than press, and
  * neither of which belongs inside a button.
  */
-#define ROW_H 56
-#define ROW_TOP 56		/* first row, clear of the title rule at y=40 */
-#define ROW_GAP 8
+/*
+ * THREE rows since the badges (1.7.0): Display, Badges, Software update. They
+ * are 52 px -- 9.3 mm, still over the fingertip -- with 6 px between, which
+ * is what three of them and one footer line can have inside 240.
+ */
+#define ROW_H 52
+#define ROW_TOP 46		/* first row, clear of the title rule at y=40 */
+#define ROW_GAP 6
 
 /*
  * The footer: two centred lines under the last row, on the panel itself.
@@ -2375,18 +2399,25 @@ static void build_panel(lv_obj_t *parent_scr)
  * job and the footer room for the second line, which is the thing an update
  * actually needs someone to know.
  */
-#define FOOT_Y1 192
-#define FOOT_Y2 212
+/*
+ * ONE footer line now: the instruction. The badges row took the height the
+ * version pair had, and the pair went back into the update row's subtitle --
+ * the place it started -- because of the two lines it is the one that is
+ * about that row, and "Keep the cable connected" is about the whole screen.
+ * The row's state ("Update ready") moved up beside the title so the two no
+ * longer have to share the middle.
+ */
+#define FOOT_Y1 220
 
 /*
- * Two rows and a two-line footer, inside 240. Checked here rather than
+ * Three rows and a one-line footer, inside 240. Checked here rather than
  * eyeballed, because the last time these moved a row went off the bottom of a
  * 240 px screen and nobody noticed until it was flashed. FONT_LINE_H is 16 for
- * the default montserrat_14, so the second line ends at 228.
+ * the default montserrat_14, so the line ends at 236.
  */
-BUILD_ASSERT(ROW_TOP + 2 * ROW_H + ROW_GAP <= FOOT_Y1,
+BUILD_ASSERT(ROW_TOP + 3 * ROW_H + 2 * ROW_GAP <= FOOT_Y1,
 	     "the settings rows now overlap the footer");
-BUILD_ASSERT(FOOT_Y2 + 16 <= 240,
+BUILD_ASSERT(FOOT_Y1 + 16 <= 240,
 	     "the settings footer no longer fits on the panel");
 	/* No green edge seam here. It existed as a left-edge cue back when the
 	 * back control was a bare chevron that was easy to miss; the control is
@@ -2421,26 +2452,9 @@ BUILD_ASSERT(FOOT_Y2 + 16 <= 240,
 	 * pair is behind, since the app's version is otherwise invisible from
 	 * the panel.
 	 */
-	upd_btn = mk_row(panel, ROW_TOP + (ROW_H + ROW_GAP), ROW_H,
-			 "Software update", NULL,
-			 false, upd_cb, NULL, NULL);
-
-	/* The row's state, beside the row's name. Right-aligned clear of the
-	 * chevron so it can grow to "Install 0.6.1" without colliding, and on
-	 * the middle now that there is no second line to sit above. */
-	upd_lbl = lv_label_create(upd_btn);
-	lv_obj_set_style_text_color(upd_lbl, COL_DIM, 0);
-	lv_obj_align(upd_lbl, LV_ALIGN_RIGHT_MID, -34, 0);
-
-	/*
-	 * Both versions, on the panel rather than in the button.
-	 *
-	 * This is the only place on the device that can say which HALF of the
-	 * pair is behind -- the app's version is otherwise invisible from the
-	 * panel -- so it says both, or says the board's alone when no host has
-	 * introduced itself.
-	 */
-	lv_obj_t *ver = lv_label_create(panel);
+	badges_summary(sub, sizeof(sub));
+	mk_row(panel, ROW_TOP + (ROW_H + ROW_GAP), ROW_H, "Badges", sub, false,
+	       show_badges, NULL, NULL);
 
 	if (proto_host_version()[0]) {
 		snprintf(sub, sizeof(sub), "Blink %s  |  App %s",
@@ -2448,9 +2462,16 @@ BUILD_ASSERT(FOOT_Y2 + 16 <= 240,
 	} else {
 		snprintf(sub, sizeof(sub), "Blink %s", BLINK_FW_VERSION);
 	}
-	lv_label_set_text(ver, sub);
-	lv_obj_set_style_text_color(ver, COL_DIM, 0);
-	lv_obj_align(ver, LV_ALIGN_TOP_MID, 0, FOOT_Y1);
+	upd_btn = mk_row(panel, ROW_TOP + 2 * (ROW_H + ROW_GAP), ROW_H,
+			 "Software update", sub,
+			 false, upd_cb, NULL, NULL);
+
+	/* The row's state, beside the row's name: on the title's line, right-
+	 * aligned clear of the chevron so it can grow to "Install 0.6.1", and
+	 * clear of the version line under it. */
+	upd_lbl = lv_label_create(upd_btn);
+	lv_obj_set_style_text_color(upd_lbl, COL_DIM, 0);
+	lv_obj_align(upd_lbl, LV_ALIGN_RIGHT_MID, -34, -11);
 
 	/*
 	 * The one instruction this device gives, and it is here because this
@@ -2464,7 +2485,7 @@ BUILD_ASSERT(FOOT_Y2 + 16 <= 240,
 
 	lv_label_set_text(keep, "Keep the cable connected");
 	lv_obj_set_style_text_color(keep, COL_DIM, 0);
-	lv_obj_align(keep, LV_ALIGN_TOP_MID, 0, FOOT_Y2);
+	lv_obj_align(keep, LV_ALIGN_TOP_MID, 0, FOOT_Y1);
 
 	upd_timer_cb(NULL);	/* correct the row before the first tick */
 

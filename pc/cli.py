@@ -2402,7 +2402,7 @@ def _wire_line():
     """
     import json as _json
     from pc import ingest
-    msg = ingest.IngestionBus().poll()
+    msg = ingest.IngestionBus(badge_book=False).poll()
     print()
     if msg is None:
         print("Wire        nothing to send -- no source has a reading")

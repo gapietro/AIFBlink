@@ -16,6 +16,8 @@
 #include <lvgl.h>
 #include "usage_view.h"
 #include "usage_layout.h"
+#include "badges.h"
+#include "ui_badges.h"
 
 static uint16_t fb[SCR_W * SCR_H];
 
@@ -245,6 +247,23 @@ int main(int argc, char **argv)
 		usage_view_set_activity(USAGE_ACTIVITY_RUNNING);
 		usage_view_set_sessions(1, 0);
 		usage_view_set_clock(14, 05);
+		break;
+	case 15: /* The Badges screen: a desk a few weeks in -- most of the
+		  * ten, one hard one, one hidden one found -- with a locked
+		  * hard badge selected to show its rule. */
+		usage_view_set_provider1("claude");
+		usage_view_update(27.0, 13231, 42.0, 598831);
+		badges_set_mask(0x03FF & ~(1u << 9) & ~(1u << 7));
+		badges_set_mask(badges_mask() | (1u << 11) | (1u << 13));
+		ui_badges_open(lv_screen_active());
+		ui_badges_select(10);
+		break;
+	case 16: /* A badge earned, announced on the gauges. */
+		usage_view_set_provider1("claude");
+		usage_view_update(27.0, 13231, 42.0, 598831);
+		usage_view_set_activity(USAGE_ACTIVITY_RUNNING);
+		usage_view_set_clock(14, 05);
+		usage_view_announce("Badge earned: Night Owl");
 		break;
 	case 4:	/* nothing known: every optional field absent */
 		usage_view_set_provider1("");

@@ -33,12 +33,15 @@ class Bridge:
                  app_ver=RELEASE_VERSION,
                  wall=_local_wall, fetch_manifest=None, fetch_firmware=None,
                  flash_image=None, self_update=None, pending=None,
-                 fetch_signed_manifest=None, report_failure=None):
+                 fetch_signed_manifest=None, report_failure=None,
+                 record_egg=None):
         self._write = write_msg          # callable(dict)
         self._fetch = fetch_usage        # callable() -> usage message dict
         # The board owns the primary-provider preference; this applies it.
         # None on a daemon wired without a bus (the tests do this).
         self._set_preferred = set_preferred
+        # A hidden badge the board found (pc/badges). None without a bus.
+        self._record_egg = record_egg
         self._now = now
         self._last_query_at = None       # see offer_if_newer
         self._wall = wall                # callable() -> (epoch_s, utc_offset_min)
@@ -71,6 +74,7 @@ class Bridge:
         self._app_update = None          # (version, artifact) from last query
         self._last_session = None        # (label, n) last sent; see poll_once
         self._last_plan = None           # plan message last sent; see _send_plan_if_changed
+        self._last_badges = None         # badges message last sent
         # The last usage message actually PUT ON THE WIRE, minus the fields
         # that move on their own (protocol.VOLATILE_USAGE_KEYS). This is what
         # poll_if_changed decides against: "sent", not "read", because the
@@ -100,6 +104,7 @@ class Bridge:
         # per daemon lifetime.
         self._last_session = None
         self._last_plan = None
+        self._last_badges = None
         self.poll_once()                 # push current data immediately
         # Only once the board has been heard. On the no-reset connect path
         # greet() runs before any message has reached on_message, so
@@ -151,6 +156,13 @@ class Bridge:
             if self._set_preferred and isinstance(want, str):
                 if self._set_preferred(want):
                     print(f"[bridge] main source: {want}", file=sys.stderr)
+            return
+        if t == "egg":
+            # The wordmark taps (firmware/src/ui_badges.c). Recorded, then
+            # announced through the same path as any badge.
+            if self._record_egg:
+                self._record_egg(msg.get("id"))
+                self._send_badges_if_changed()
             return
         if t == "hello":
             self._note_board(msg)
@@ -623,6 +635,7 @@ class Bridge:
         # the dollar figures about every five minutes, on their own schedule,
         # and a new "$318" can arrive while the percentage line is unchanged.
         self._send_plan_if_changed()
+        self._send_badges_if_changed()
         self._send_session_if_changed()
 
     def _read_usage(self):
@@ -657,6 +670,7 @@ class Bridge:
         # under the old gauge names until the next message.
         self._send_plan_if_changed()
         self._write(usage)
+        self._send_badges_if_changed()
         # Recorded here, once, so that no path can push without moving the
         # baseline -- a push that forgot to would leave the fast tick
         # re-sending the same message every two seconds forever.
@@ -709,3 +723,20 @@ class Bridge:
             return
         self._write(msg)
         self._last_plan = msg
+
+    def _send_badges_if_changed(self):
+        """The collection on change, and each new badge announced once.
+
+        The announcement goes AFTER the collection, so a board that shows
+        the "Badge earned" card is already holding the badge it names.
+        """
+        msg_of = getattr(self._fetch, "badges_msg", None)
+        take = getattr(self._fetch, "take_new_badges", None)
+        if msg_of is None:
+            return
+        msg = msg_of()
+        if msg is not None and msg != self._last_badges:
+            self._write(msg)
+            self._last_badges = msg
+        for index in (take() if take else []):
+            self._write(protocol.badge_earned(index))

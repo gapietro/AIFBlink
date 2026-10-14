@@ -357,6 +357,7 @@ static double model_fable = -1;
 
 static void render_weekly(void);
 static void render_age(void);
+static void wordmark_cb(lv_event_t *e);
 /* Defined beside pip_colour(), which it borrows; called from the 1 s tick,
  * which runs earlier in this file. */
 static void toast_hide(void);
@@ -829,6 +830,12 @@ void usage_view_init(void)
 	lv_obj_set_style_text_color(title, COL_BRAND, 0);
 	lv_obj_set_style_text_letter_space(title, 2, 0);
 	lv_obj_align(title, LV_ALIGN_TOP_MID, 0, TITLE_Y);
+	/* The forge: see wordmark_cb. Clickable, but gestures still bubble, so
+	 * a swipe that starts on the wordmark is still a swipe. */
+	lv_obj_add_flag(title, LV_OBJ_FLAG_CLICKABLE);
+	lv_obj_add_flag(title, LV_OBJ_FLAG_GESTURE_BUBBLE);
+	lv_obj_set_ext_click_area(title, 8);
+	lv_obj_add_event_cb(title, wordmark_cb, LV_EVENT_CLICKED, NULL);
 
 	dot = lv_obj_create(scr);
 	lv_obj_set_size(dot, DOT_SZ, DOT_SZ);
@@ -2051,13 +2058,152 @@ static void toast_hide(void)
  * and the timer restarts from it. The alternative is a card that keeps
  * talking after the news is stale, which is how a popup earns being ignored.
  */
+/* Defined below, beside the toast it borrows. */
+static void toast_show_colour(lv_color_t c, const char *text);
+
+/*
+ * THE FORGE: tap the AIF BLINK wordmark seven times, quickly, and the anvil
+ * throws sparks -- and the Blacksmith badge is found (pc/badges.EGGS).
+ *
+ * Seven taps inside FORGE_WINDOW_MS, counted from the first; a pause longer
+ * than that starts the count again, so ordinary taps on the header never add
+ * up to it by accident over a day.
+ */
+#define FORGE_TAPS		7
+#define FORGE_WINDOW_MS		3000
+#define SPARKS			18
+#define SPARK_MS		900
+
+static void (*egg_cb)(const char *id);
+static int forge_taps;
+static int64_t forge_first_ms;
+
+void usage_view_set_egg_cb(void (*fn)(const char *id))
+{
+	egg_cb = fn;
+}
+
+static void spark_exec_x(void *obj, int32_t v)
+{
+	lv_obj_set_x(obj, v);
+}
+
+static void spark_exec_y(void *obj, int32_t v)
+{
+	lv_obj_set_y(obj, v);
+}
+
+static void spark_exec_opa(void *obj, int32_t v)
+{
+	lv_obj_set_style_bg_opa(obj, (lv_opa_t)v, 0);
+}
+
+static void spark_done(lv_anim_t *a)
+{
+	lv_obj_del(a->var);
+}
+
+/*
+ * A burst from the wordmark: small dots in the AIF green and white, flung
+ * outward and down like sparks off an anvil, fading as they go. Each one is
+ * an LVGL object that deletes itself when its fade ends, so nothing has to
+ * remember them -- and a second burst before the first is over is simply
+ * more sparks.
+ */
+static void forge_sparks(void)
+{
+	lv_obj_t *scr = lv_screen_active();
+	/* A fixed fan of directions, not a random one: the burst should look
+	 * the same every time, and this file has no RNG worth seeding. */
+	static const int8_t dx[SPARKS] = { -90, -70, -52, -36, -22, -10, 0, 10,
+					   22, 36, 52, 70, 90, -60, -28, 28,
+					   60, 0 };
+	static const int8_t dy[SPARKS] = { 40, 70, 95, 110, 122, 128, 130, 128,
+					   122, 110, 95, 70, 40, 20, 60, 60,
+					   20, 80 };
+
+	for (int i = 0; i < SPARKS; i++) {
+		lv_obj_t *sp = lv_obj_create(scr);
+		int sz = (i % 3) + 3;
+		int x0 = SCR_W / 2 - sz / 2, y0 = TITLE_Y + 8;
+		lv_anim_t a;
+
+		lv_obj_remove_style_all(sp);
+		lv_obj_set_size(sp, sz, sz);
+		lv_obj_set_style_radius(sp, LV_RADIUS_CIRCLE, 0);
+		lv_obj_set_style_bg_color(sp, (i % 3) ? COL_BRAND : COL_TEXT, 0);
+		lv_obj_set_style_bg_opa(sp, LV_OPA_COVER, 0);
+		lv_obj_clear_flag(sp, LV_OBJ_FLAG_CLICKABLE);
+		lv_obj_set_pos(sp, x0, y0);
+
+		lv_anim_init(&a);
+		lv_anim_set_var(&a, sp);
+		lv_anim_set_duration(&a, SPARK_MS);
+		lv_anim_set_path_cb(&a, lv_anim_path_ease_out);
+		lv_anim_set_exec_cb(&a, spark_exec_x);
+		lv_anim_set_values(&a, x0, x0 + dx[i]);
+		lv_anim_start(&a);
+
+		lv_anim_set_exec_cb(&a, spark_exec_y);
+		lv_anim_set_values(&a, y0, y0 + dy[i]);
+		lv_anim_start(&a);
+
+		lv_anim_set_path_cb(&a, lv_anim_path_linear);
+		lv_anim_set_exec_cb(&a, spark_exec_opa);
+		lv_anim_set_values(&a, LV_OPA_COVER, LV_OPA_TRANSP);
+		lv_anim_set_completed_cb(&a, spark_done);
+		lv_anim_start(&a);
+	}
+}
+
+static void wordmark_cb(lv_event_t *e)
+{
+	int64_t now = k_uptime_get();
+
+	(void)e;
+	if (forge_taps == 0 || now - forge_first_ms > FORGE_WINDOW_MS) {
+		forge_taps = 0;
+		forge_first_ms = now;
+	}
+	if (++forge_taps < FORGE_TAPS) {
+		return;
+	}
+	forge_taps = 0;
+	forge_sparks();
+	if (egg_cb) {
+		egg_cb("blacksmith");
+	}
+}
+
+/*
+ * A one-off card on the gauges in a colour of the caller's choosing -- the
+ * "Badge earned" announcement. Same card, same five seconds, and the same
+ * two refusals as the session popups: not while the board is asleep, and
+ * not under the CONNECTING screen, where it would spend its time unseen.
+ */
+void usage_view_announce(const char *text)
+{
+	if (!built || sleeping || usage_view_takeover_active()) {
+		return;
+	}
+	toast_show_colour(COL_BRAND, text);
+}
+
 static void toast_show(enum fmt_pip_kind kind, const char *text)
 {
 	if (!toast || !toast_lbl) {
 		return;
 	}
+	toast_show_colour(pip_colour(kind), text);
+}
+
+static void toast_show_colour(lv_color_t c, const char *text)
+{
+	if (!toast || !toast_lbl) {
+		return;
+	}
 	lv_label_set_text(toast_lbl, text);
-	lv_obj_set_style_text_color(toast_lbl, pip_colour(kind), 0);
+	lv_obj_set_style_text_color(toast_lbl, c, 0);
 	lv_obj_clear_flag(toast, LV_OBJ_FLAG_HIDDEN);
 	toast_ttl = TOAST_TTL_S;
 }

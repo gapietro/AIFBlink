@@ -68,10 +68,12 @@ $CC -O1 -w -DLV_CONF_INCLUDE_SIMPLE=1 \
 	"$ROOT/firmware/src/usage_view.c" \
 	"$ROOT/firmware/src/fmt.c" \
 	"$ROOT/firmware/src/usage_state.c" \
+	"$ROOT/firmware/src/badges.c" \
+	"$ROOT/firmware/src/ui_badges.c" \
 	@"$BUILD/srcs.txt" \
 	-o "$BUILD/render"
 
-for scene in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14; do
+for scene in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16; do
 	"$BUILD/render" "$OUT/panel-$scene.ppm" "$scene"
 done
 # The high-contrast palette (firmware/src/theme.h), on the scenes that show

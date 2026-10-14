@@ -14,6 +14,7 @@
 #include "cfg_store.h"
 #include "whatsnew.h"
 #include "usage_view.h"
+#include "badges.h"
 #include "usage_state.h"
 #include "usage_freshness.h"
 #include "net_time.h"
@@ -122,6 +123,18 @@ static void emit(const char *json)
 {
 	/* JSON lines go to the same console UART; '\n'-terminated. */
 	printk("%s\n", json);
+}
+
+void proto_send_egg(const char *id)
+{
+	char buf[64];
+
+	/* Hidden badges the board finds itself (the wordmark taps). The daemon
+	 * decides whether it counts -- it ignores anything that is not one of
+	 * its eggs -- and answers with the usual badge messages. */
+	snprintf(buf, sizeof(buf), "{\"t\":\"egg\",\"v\":%d,\"id\":\"%s\"}",
+		 PROTO_VERSION, id);
+	emit(buf);
 }
 
 void proto_send_pref(void)
@@ -699,6 +712,25 @@ static void dispatch(const char *json)
 		 * the question, not how much somebody spent. */
 		printk("[plan] %s %s%s%s\n", who[0] ? who : "-",
 		       kind[0] ? kind : "windows", period[0] ? " " : "", period);
+	} else if (strcmp(type, "badges") == 0) {
+		/* The whole collection (pc/badges.py): bit N is badge N.
+		 * Sent on change and on every connect. */
+		double got = 0;
+
+		num(json, "got", &got, 0, 4294967295.0);
+		badges_set_mask((uint32_t)got);
+	} else if (strcmp(type, "badge") == 0) {
+		/* One badge, earned just now: say so on the gauges. Sent after
+		 * the collection that contains it. */
+		double id = -1;
+		char text[48];
+
+		num(json, "id", &id, 0, BADGE_COUNT - 1);
+		if (id >= 0) {
+			badge_announcement((int)id, text, sizeof(text));
+			usage_view_announce(text);
+			printk("[badge] %s\n", badge_get((int)id)->name);
+		}
 	} else if (strcmp(type, "session") == 0) {
 		/*
 		 * Which project is doing the thing the dot is already

@@ -1125,6 +1125,7 @@ def main(argv=None):
                         flash_image=flash_image,
                         report_failure=report_failure,
                         set_preferred=bus.set_preferred,
+                        record_egg=bus.record_egg,
                         self_update=self_update,
                         pending=update.PendingFirmware(
                             os.path.join(blink_home, "pending_fw.json")))

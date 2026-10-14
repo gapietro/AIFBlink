@@ -321,6 +321,8 @@ Codex one.
 
 **Display settings.** Settings -> Display holds the brightness (five levels) and the contrast: **Normal** is the AIF navy, **High** a near-black ground with pure white text, for a panel that looks washed out. Changing contrast restarts the board into the new colours -- a couple of seconds, a brief reconnect to the app -- and puts you back on the Display screen. Contrast is done with the colours the board draws, not by re-tuning the panel's controller: that was tried, and on these boards it garbled the screen.
 
+**Badges.** Settings -> Badges is a collection earned by using the board: ten everyday ones (First Light, Early Bird, Night Owl, Multitasker, Agent Wrangler, Polyglot, Week Streak, Quick Draw, Cool Head, Centurion), three hard ones (Iron Streak, Bullseye, Swarm Lord) and two hidden ones, shown as "???" until found. Tap a badge for what earns it; a new one is announced on the gauges. The app decides what has been earned and keeps the collection in `~/.blink/badges.json`, so each computer has its own and it survives a board swap or an update. No badge rewards using quota for its own sake.
+
 **This fork's units are the AI Foundry team's.** The gauge, settings and setup screens use the AIF logo's navy and green, and the header reads AIF BLINK; both ship with the firmware, so every board on this feed gets them with an update. The startup screen is a company logo built from the AIF mark by `tools/make_aif_startup.py`, and like any company logo it goes on with the cable, once per board:
 
 ```bash

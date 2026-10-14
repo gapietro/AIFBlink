@@ -30,6 +30,7 @@ static const struct {
 	const char *version;
 	const char *lines;
 } NOTES[] = {
+	{ "1.4.0", "Shows Enterprise spend limits" },
 	{ "1.3.5", "Clearer messages from the app" },
 	{ "1.3.4", "Updates come from your own fork" },
 	{ "1.3.3", "A dropped update finishes itself\nThe board asks again if one fails" },

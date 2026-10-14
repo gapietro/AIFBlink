@@ -81,6 +81,12 @@ int cfg_set_main_src(uint8_t src);
 uint8_t cfg_get_bright_pct(void);
 int cfg_set_bright_pct(uint8_t pct);
 
+/* Screen contrast level, 0 = normal (see panel_tune.h). Persisted like the
+ * brightness. Returns 0 when never set. Not range-checked here: panel_tune
+ * clamps what it reads, so a value from a newer firmware degrades to normal. */
+uint8_t cfg_get_contrast(void);
+int cfg_set_contrast(uint8_t level);
+
 /* Last known UTC offset (minutes east of UTC), fed by the tz API in WiFi mode
  * so the clock survives API outages. cfg_get_tz() returns false until an
  * offset has ever been stored. */

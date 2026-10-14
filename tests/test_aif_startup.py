@@ -28,6 +28,6 @@ def test_its_background_is_the_gauge_screens():
     img = _tool().build()
     corner = "%02X%02X%02X" % img.getpixel((0, 0))
     src = (ROOT / "firmware" / "src" / "usage_view.c").read_text()
-    bg = re.search(r"#define COL_BG\s+lv_color_hex\(0x([0-9A-Fa-f]{6})\)",
-                   src).group(1).upper()
+    bg = re.search(r"#define COL_BG\s+(?:THEMED|lv_color_hex)"
+                   r"\(0x([0-9A-Fa-f]{6})", src).group(1).upper()
     assert corner == bg

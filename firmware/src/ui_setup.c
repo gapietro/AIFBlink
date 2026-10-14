@@ -13,19 +13,20 @@
 #include "ui_setup.h"
 #include "net_wifi.h"
 #include "fmt.h"
+#include "theme.h"
 #include "usage_layout.h"	/* BRAND_TEXT */
 
 /* Backgrounds are deliberately two distinct values so the QR panel reads as its
  * own zone rather than blending into the screen.
  */
-#define COL_BG		lv_color_hex(0x011824)	/* screen: darker than the AIF navy, see usage_view.c */
-#define COL_PANEL	lv_color_hex(0x000F17)	/* QR panel -- clearly darker */
+#define COL_BG		THEMED(0x011824, 0x000A10)	/* screen: darker than the AIF navy, see usage_view.c */
+#define COL_PANEL	THEMED(0x000F17, 0x000000)	/* QR panel -- clearly darker */
 #define COL_SEAM	lv_color_hex(0x6AC251)	/* divider */
 #define COL_TEXT	lv_color_hex(0xFFFFFF)
-#define COL_DIM		lv_color_hex(0xB4C6D2)
+#define COL_DIM		THEMED(0xB4C6D2, 0xD2DEE6)
 #define COL_GREEN	lv_color_hex(0x6AC251)	/* the AIF logo's green */
 #define COL_GREEN_INK	lv_color_hex(0x06210F)
-#define COL_TRACK	lv_color_hex(0x143B4F)
+#define COL_TRACK	THEMED(0x143B4F, 0x2A5A72)
 #define COL_PILLBG	lv_color_hex(0x0C3326)
 #define COL_RED		lv_color_hex(0xE74C3C)
 

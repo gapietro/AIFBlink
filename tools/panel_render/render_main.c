@@ -19,6 +19,18 @@
 
 static uint16_t fb[SCR_W * SCR_H];
 
+/*
+ * theme.c needs Zephyr (it persists and reboots), so the harness supplies the
+ * one function usage_view.c calls: which palette to draw in. The fourth
+ * argument picks it -- render.sh draws a high-contrast copy of a few scenes.
+ */
+static uint8_t render_theme;
+
+uint8_t theme_level(void)
+{
+	return render_theme;
+}
+
 static void flush_cb(lv_display_t *disp, const lv_area_t *area, uint8_t *px)
 {
 	uint16_t *src = (uint16_t *)px;
@@ -68,6 +80,8 @@ int main(int argc, char **argv)
 	static uint8_t buf[SCR_W * 40 * 2];
 	const char *out = argc > 1 ? argv[1] : "panel.ppm";
 	int scene = argc > 2 ? atoi(argv[2]) : 0;
+
+	render_theme = argc > 3 ? (uint8_t)atoi(argv[3]) : 0;
 
 	lv_init();
 	lv_display_t *disp = lv_display_create(SCR_W, SCR_H);

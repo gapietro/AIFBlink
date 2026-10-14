@@ -15,6 +15,7 @@
 #include "usage_view.h"
 #include "cfg_store.h"
 #include "backlight.h"
+#include "theme.h"
 #include "net_wifi.h"
 #include "net_time.h"
 #include "portal.h"
@@ -1487,6 +1488,9 @@ static void run_usb(void)
 	/* Same as run_standalone: drop anything latched before this loop
 	 * existed to service it. See ui_settings.h. */
 	ui_settings_drop_pending();
+	if (theme_take_reopen()) {
+		ui_settings_reopen_display();	/* a contrast change brought us here */
+	}
 
 	while (1) {
 		proto_service();
@@ -1759,6 +1763,7 @@ int main(void)
 	ui_touchfx_init();	/* light touch-echo feedback on every press */
 
 	cfg_init();
+	theme_init();	/* before any screen is built: they take its colours */
 	ota_boot_begin();	/* unconfirmed image? start the confirm clock */
 	/* ...and from here the boot screen's own wait loops feed it too; they
 	 * block for seconds against a 30 s window. */

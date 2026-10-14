@@ -14,6 +14,7 @@
 #include "fmt.h"
 #include "usage_state.h"
 #include "cfg_store.h"
+#include "theme.h"
 
 /* Severity colours: green under 60%, amber approaching, red near the limit. */
 /*
@@ -29,11 +30,16 @@
  * tools/make_aif_startup.py recolours the logo's navy to this, so the startup
  * screen still hands over without the panel changing colour.
  */
-#define COL_BG		lv_color_hex(0x011824)
-#define COL_PANEL	lv_color_hex(0x000F17)
-#define COL_TRACK	lv_color_hex(0x143B4F)
-#define COL_TEXT	lv_color_hex(0xE6E8EB)
-#define COL_DIM		lv_color_hex(0x9DB3C1)
+/*
+ * Every colour that changes with the contrast mode is THEMED(normal, high) --
+ * see theme.h. High is a near-black ground with pure white text: as much
+ * separation as this panel can show, for the owner's washed-out glass.
+ */
+#define COL_BG		THEMED(0x011824, 0x000A10)
+#define COL_PANEL	THEMED(0x000F17, 0x000000)
+#define COL_TRACK	THEMED(0x143B4F, 0x1A4A62)
+#define COL_TEXT	THEMED(0xE6E8EB, 0xFFFFFF)
+#define COL_DIM		THEMED(0x9DB3C1, 0xC9D6DE)
 /*
  * The severity ramp: green, amber, red -- and all three sit inside a 1.16x
  * luminance band on purpose.
@@ -79,7 +85,7 @@
  * 3:1 minimum for a graphic element -- and these are the swipe chevrons, which
  * exist only because nobody discovered the gestures without them. An
  * affordance too dim to notice is not an affordance. */
-#define COL_GREY	lv_color_hex(0x7D93A6)
+#define COL_GREY	THEMED(0x7D93A6, 0x93A8B8)
 /*
  * The wordmark's colour: the AIF logo's green. Not a severity colour and not
  * held to the severity rules -- it is the one piece of identity on the screen,

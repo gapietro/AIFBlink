@@ -60,8 +60,43 @@ struct rec {
 	uint8_t main_src;		/* 0 unset -> claude; else enum cfg_main_src */
 	uint8_t edition;		/* 0 unset -> claude; else enum cfg_edition */
 	uint8_t edition_locked;		/* 1 once stamped; see cfg_set_edition */
+	uint8_t contrast;		/* 0 = normal; see theme.h */
 	uint32_t crc;		/* over everything above, always last */
 } __packed;
+
+/*
+ * The layout before `contrast` (1.6.1) -- the current layout minus its last
+ * field, so a record sealed by 1.5.1 or earlier keeps every byte it had,
+ * the edition latch included. See rec_pre_src for why every field addition
+ * needs one of these.
+ */
+struct rec_pre_contrast {
+	uint32_t magic;
+	uint32_t seq;
+	uint8_t mode;
+	uint8_t weekly_sel;
+	uint8_t tz_set;
+	uint8_t bright_pct;
+	int32_t tz_min;
+	char ssid[CFG_SSID_MAX];
+	char psk[CFG_PSK_MAX];
+	char token[CFG_TOKEN_MAX];
+	char ap_psk[CFG_AP_PSK_MAX];
+	uint8_t ota_state;
+	char ota_target[CFG_OTA_VER_MAX];
+	uint8_t main_src;
+	uint8_t edition;
+	uint8_t edition_locked;
+	uint32_t crc;
+} __packed;
+
+/* The layout after `contrast` is identical up to the field it added, which is
+ * what lets the migration copy the old record as one block. Checked, so a
+ * field inserted anywhere but the end fails the build instead of shifting
+ * somebody's edition latch into their WiFi password. */
+BUILD_ASSERT(offsetof(struct rec, contrast) ==
+	     offsetof(struct rec_pre_contrast, crc),
+	     "rec must equal rec_pre_contrast plus one trailing field");
 
 /* The layout before the edition latch. Everything else is identical, so the
  * only question a migration has to answer is whether the record it found had
@@ -173,7 +208,23 @@ static bool slot_load(int off, struct rec *out)
 		return true;
 	}
 
-	/* Not a current record -- try the layout from before the edition latch. */
+	/* The layout from before `contrast`: everything carried over, the edition
+	 * latch exactly as it was, and contrast at its default. */
+	struct rec_pre_contrast pc;
+
+	memcpy(&pc, buf, sizeof(pc));
+	if (pc.magic == REC_MAGIC &&
+	    pc.crc == crc32_ieee((const uint8_t *)&pc,
+				 offsetof(struct rec_pre_contrast, crc))) {
+		memset(out, 0, sizeof(*out));
+		memcpy(out, &pc, offsetof(struct rec_pre_contrast, crc));
+		out->contrast = 0;
+		out->crc = rec_crc(out);
+		printk("[cfg] migrated pre-contrast record (seq %u)\n", pc.seq);
+		return true;
+	}
+
+	/* Older -- the layout from before the edition latch. */
 	struct rec_pre_lock pl;
 
 	memcpy(&pl, buf, sizeof(pl));
@@ -570,6 +621,22 @@ int cfg_set_bright_pct(uint8_t pct)
 {
 	k_mutex_lock(&cfg_lock, K_FOREVER);
 	cfg.bright_pct = pct;
+
+	int rc = persist();
+
+	k_mutex_unlock(&cfg_lock);
+	return rc;
+}
+
+uint8_t cfg_get_contrast(void)
+{
+	return cfg.contrast;
+}
+
+int cfg_set_contrast(uint8_t level)
+{
+	k_mutex_lock(&cfg_lock, K_FOREVER);
+	cfg.contrast = level;
 
 	int rc = persist();
 

@@ -48,10 +48,17 @@ NAVY_REACH = 120.0
 
 
 def panel_bg():
-    """COL_BG from usage_view.c, as an (r, g, b) tuple."""
+    """COL_BG from usage_view.c, as an (r, g, b) tuple.
+
+    The NORMAL palette's: the first value of THEMED(normal, high), or the
+    only value of a plain lv_color_hex(). The high-contrast palette's ground
+    is near-black, and a board in that mode shows this screen's navy for its
+    three seconds before the gauges -- one picture cannot match both, and the
+    logo partition holds one picture.
+    """
     with open(USAGE_VIEW, encoding="utf-8") as f:
-        m = re.search(r"#define COL_BG\s+lv_color_hex\(0x([0-9A-Fa-f]{6})\)",
-                      f.read())
+        m = re.search(r"#define COL_BG\s+(?:THEMED|lv_color_hex)"
+                      r"\(0x([0-9A-Fa-f]{6})", f.read())
     v = int(m.group(1), 16)
     return (v >> 16 & 0xFF, v >> 8 & 0xFF, v & 0xFF)
 

@@ -36,6 +36,7 @@
 #include "upd_prompt.h"
 #include "upd_row.h"
 #include "usage_view.h"
+#include "theme.h"
 
 /*
  * The AI Foundry palette (2026-10-14), taken from the AIF logo itself: its
@@ -51,15 +52,15 @@
  * text a lighter blue-grey (10.3:1 rather than 6.6:1), and the cards stand
  * further off the background so each row reads as its own control.
  */
-#define COL_BG		lv_color_hex(0x011824)
-#define COL_TRACK	lv_color_hex(0x143B4F)
+#define COL_BG		THEMED(0x011824, 0x000A10)
+#define COL_TRACK	THEMED(0x143B4F, 0x2A5A72)
 #define COL_TEXT	lv_color_hex(0xFFFFFF)
-#define COL_DIM		lv_color_hex(0xB4C6D2)
+#define COL_DIM		THEMED(0xB4C6D2, 0xD2DEE6)
 #define COL_RED		lv_color_hex(0xE74C3C)
 #define COL_GREEN	lv_color_hex(0x6AC251)
 #define COL_AMBER	lv_color_hex(0xF1C40F)
-#define COL_PANEL	lv_color_hex(0x0C3347)	/* card fill, sits above COL_BG */
-#define COL_LINE	lv_color_hex(0x1A4A62)	/* the full-width section rules */
+#define COL_PANEL	THEMED(0x0C3347, 0x0E3D55)	/* card fill, sits above COL_BG */
+#define COL_LINE	THEMED(0x1A4A62, 0x2E6684)	/* the full-width section rules */
 #define COL_DANGER_BG	lv_color_hex(0x2A1A22)	/* factory tile: red-tinted, not solid red */
 #define COL_DANGER_BD	lv_color_hex(0x7A2B23)
 
@@ -285,25 +286,45 @@ static lv_obj_t *pct_lbl;	/* the brightness row's subtitle: "60%" */
  * sources. That is a HOST-side meaning, and it is not something to settle from
  * across the room with a fingertip.
  */
-static lv_obj_t *bright_big;	/* the big readout on the brightness screen */
-static lv_obj_t *bright_ov;	/* the brightness screen itself, or NULL */
+static lv_obj_t *bright_big;	/* the brightness readout on the Display screen */
+static lv_obj_t *bright_ov;	/* the Display screen itself, or NULL */
 static lv_obj_t *seg[BRIGHT_STOPS];
+/* The contrast half of the Display screen -- see theme.h. */
+static lv_obj_t *con_lbl;
+static lv_obj_t *con_btn[THEME_LEVELS];
+static lv_obj_t *con_txt[THEME_LEVELS];
 
 static void bright_refresh(void)
 {
 	uint8_t p = backlight_get();
-	char b[8];
+	uint8_t c = theme_level();
+	char b[40];
 
-	snprintf(b, sizeof(b), "%d%%", p);
 	/* Every one of these is optional: the row exists only while the panel
-	 * is open, and the readout and stops only while the brightness screen
+	 * is open, and the readout and stops only while the Display screen
 	 * is. Writing through a pointer whose object has been deleted is the
 	 * NULL-deref this file has already been bitten by once. */
 	if (pct_lbl) {
+		snprintf(b, sizeof(b), "%d%%  |  Contrast: %s", p, theme_name(c));
 		lv_label_set_text(pct_lbl, b);
 	}
 	if (bright_big) {
+		snprintf(b, sizeof(b), "Brightness %d%%", p);
 		lv_label_set_text(bright_big, b);
+	}
+	if (con_lbl) {
+		snprintf(b, sizeof(b), "Contrast: %s", theme_name(c));
+		lv_label_set_text(con_lbl, b);
+	}
+	/* The level in use is the lit one, as with the brightness stops. */
+	for (int i = 0; i < THEME_LEVELS; i++) {
+		if (con_btn[i] == NULL) {
+			continue;
+		}
+		lv_obj_set_style_bg_color(con_btn[i],
+					  i == c ? COL_TEXT : COL_PANEL, 0);
+		lv_obj_set_style_text_color(con_txt[i],
+					    i == c ? COL_BG : COL_TEXT, 0);
 	}
 	for (int i = 0; i < BRIGHT_STOPS; i++) {
 		uint8_t lvl = 20 + i * 20;
@@ -1468,6 +1489,9 @@ static void upd_timer_cb(lv_timer_t *t)
  */
 static bool closing;
 static volatile bool want_open;
+/* See ui_settings_reopen_display(). */
+static bool reopen_display;
+static bool open_display_next;
 /*
  * A pending provider-page change, -1 or +1, 0 for none. Same reason want_open
  * exists: the page change is a wipe transition now, and ui_slide_run() must
@@ -1624,8 +1648,13 @@ static void bright_close(void)
 	/* Forget the children BEFORE deleting the parent: bright_refresh() can
 	 * be called from a step at any time and writes through both. */
 	bright_big = NULL;
+	con_lbl = NULL;
 	for (int i = 0; i < BRIGHT_STOPS; i++) {
 		seg[i] = NULL;
+	}
+	for (int i = 0; i < THEME_LEVELS; i++) {
+		con_btn[i] = NULL;
+		con_txt[i] = NULL;
 	}
 	lv_obj_del(bright_ov);
 	bright_ov = NULL;
@@ -1656,6 +1685,29 @@ static void bright_stop_cb(lv_event_t *e)
 	bright_refresh();
 }
 
+/*
+ * A different contrast level restarts the board into it. The screens take
+ * their colours as they are built (theme.h), and the restart is the one way
+ * to rebuild every one of them -- the gauges, this panel, the boot screen --
+ * without a recolouring path through each widget that would be its own
+ * source of half-repainted screens. It is a rare change, and the intentional-
+ * reboot mark keeps the boot short.
+ */
+static void contrast_cb(lv_event_t *e)
+{
+	theme_set_and_restart((uint8_t)(intptr_t)lv_event_get_user_data(e));
+}
+
+/*
+ * The Display screen: brightness above, contrast below.
+ *
+ * It was the Brightness screen, with five stops 116 px tall. Contrast joined
+ * it rather than getting a row of its own because the settings list has room
+ * for exactly two rows at a pressable height (see ROW_H) -- and because the
+ * two are one question to the person asking it: "can I see this screen".
+ * The stops gave up height, not width: 56 x 64 is 10.0 x 11.4 mm, still over
+ * a fingertip, and the contrast buttons are 142 x 56, 25.3 x 10.0 mm.
+ */
 static void show_bright(lv_event_t *e)
 {
 	ARG_UNUSED(e);
@@ -1678,7 +1730,7 @@ static void show_bright(lv_event_t *e)
 
 	lv_obj_t *title = lv_label_create(bright_ov);
 
-	lv_label_set_text(title, "Brightness");
+	lv_label_set_text(title, "Display");
 	lv_obj_set_style_text_font(title, &lv_font_montserrat_16, 0);
 	lv_obj_set_style_text_color(title, COL_TEXT, 0);
 	lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 10);
@@ -1686,19 +1738,18 @@ static void show_bright(lv_event_t *e)
 	mk_line(bright_ov, 40);
 
 	bright_big = lv_label_create(bright_ov);
-	lv_obj_set_style_text_font(bright_big, &lv_font_montserrat_20, 0);
 	lv_obj_set_style_text_color(bright_big, COL_TEXT, 0);
-	lv_obj_align(bright_big, LV_ALIGN_TOP_MID, 0, 50);
+	lv_obj_align(bright_big, LV_ALIGN_TOP_MID, 0, 46);
 
-	/* Five stops, 56 x 116 -- 10.0 x 20.6 mm. The whole screen is spent on
-	 * them because this is the one control that gets used while the panel
-	 * is too dim to read. */
+	/* Five stops, 56 x 64 -- 10.0 x 11.4 mm. Still the largest targets on
+	 * the screen, because brightness is the one control that gets used
+	 * while the panel is too dim to read. */
 	for (int i = 0; i < BRIGHT_STOPS; i++) {
 		uint8_t lvl = 20 + i * 20;
 
 		seg[i] = lv_btn_create(bright_ov);
-		lv_obj_set_size(seg[i], 56, 116);
-		lv_obj_align(seg[i], LV_ALIGN_TOP_LEFT, 12 + i * 60, 86);
+		lv_obj_set_size(seg[i], 56, 64);
+		lv_obj_align(seg[i], LV_ALIGN_TOP_LEFT, 12 + i * 60, 66);
 		lv_obj_set_style_bg_opa(seg[i], LV_OPA_COVER, 0);
 		lv_obj_set_style_border_width(seg[i], 0, 0);
 		lv_obj_set_style_radius(seg[i], 8, 0);
@@ -1710,13 +1761,31 @@ static void show_bright(lv_event_t *e)
 				    (void *)(intptr_t)lvl);
 	}
 
-	lv_obj_t *hint = lv_label_create(bright_ov);
+	con_lbl = lv_label_create(bright_ov);
+	lv_obj_set_style_text_color(con_lbl, COL_TEXT, 0);
+	lv_obj_align(con_lbl, LV_ALIGN_TOP_MID, 0, 140);
 
-	lv_label_set_text(hint, "Tap a level");
-	lv_obj_set_style_text_color(hint, COL_DIM, 0);
-	lv_obj_align(hint, LV_ALIGN_TOP_MID, 0, 210);
+	for (int i = 0; i < THEME_LEVELS; i++) {
+		con_btn[i] = lv_btn_create(bright_ov);
+		lv_obj_set_size(con_btn[i], 142, 56);
+		lv_obj_align(con_btn[i], LV_ALIGN_TOP_LEFT, 12 + i * 154, 164);
+		lv_obj_set_style_bg_opa(con_btn[i], LV_OPA_COVER, 0);
+		lv_obj_set_style_border_color(con_btn[i], COL_TRACK, 0);
+		lv_obj_set_style_border_width(con_btn[i], 1, 0);
+		lv_obj_set_style_radius(con_btn[i], 8, 0);
+		lv_obj_set_style_shadow_width(con_btn[i], 0, 0);
+		lv_obj_set_style_pad_all(con_btn[i], 0, 0);
+		lv_obj_clear_flag(con_btn[i], LV_OBJ_FLAG_SCROLLABLE);
+		lv_obj_clear_flag(con_btn[i], LV_OBJ_FLAG_GESTURE_BUBBLE);
+		lv_obj_add_event_cb(con_btn[i], contrast_cb, LV_EVENT_CLICKED,
+				    (void *)(intptr_t)i);
 
-	bright_refresh();	/* paints the stops and the readout */
+		con_txt[i] = lv_label_create(con_btn[i]);
+		lv_label_set_text(con_txt[i], theme_name((uint8_t)i));
+		lv_obj_center(con_txt[i]);
+	}
+
+	bright_refresh();	/* paints the stops, the buttons and the readouts */
 }
 #endif /* !CONFIG_BLINK_WIFI_MODE */
 
@@ -1727,6 +1796,9 @@ static void build_panel(lv_obj_t *parent_scr);
  * repaint over the very gauge pixels the scroll is about to move away. */
 static void do_open(void (*pump)(void))
 {
+	bool to_display = open_display_next;
+
+	open_display_next = false;
 	ui_slide_begin();
 	/* The live screen, not one cached when the gesture landed. The cached
 	 * pointer outlived its object on the failed-join path, where
@@ -1747,6 +1819,13 @@ static void do_open(void (*pump)(void))
 	/* Gauges exit left, settings enters from the right. */
 	ui_slide_run(UI_SLIDE_LEFT, pump);
 	ui_anim_gesture_mute(250);	/* short tail past the input burst */
+#if !IS_ENABLED(CONFIG_BLINK_WIFI_MODE)
+	if (to_display) {
+		show_bright(NULL);
+	}
+#else
+	ARG_UNUSED(to_display);
+#endif
 }
 
 /*
@@ -1892,8 +1971,24 @@ bool ui_settings_busy(void)
 	return panel != NULL || want_open || want_close || want_page != 0;
 }
 
+void ui_settings_reopen_display(void)
+{
+	reopen_display = true;
+}
+
 void ui_settings_service(void (*pump)(void))
 {
+	/*
+	 * Back to the Display screen after a contrast restart. Waits for the
+	 * gauges to have data, so the panel opens over the screen it would have
+	 * been opened from by hand, not over CONNECTING -- the host is back
+	 * within a couple of seconds of a restart, which is all this waits for.
+	 */
+	if (reopen_display && panel == NULL && usage_view_have_data()) {
+		reopen_display = false;
+		open_display_next = true;
+		want_open = true;
+	}
 	if (want_open && panel == NULL) {
 		want_open = false;
 		do_open(pump);
@@ -2311,8 +2406,9 @@ BUILD_ASSERT(FOOT_Y2 + 16 <= 240,
 
 	char sub[56];
 
-	snprintf(sub, sizeof(sub), "%d%%", backlight_get());
-	mk_row(panel, ROW_TOP, ROW_H, "Brightness", sub, false, show_bright, NULL,
+	snprintf(sub, sizeof(sub), "%d%%  |  Contrast: %s", backlight_get(),
+		 theme_name(theme_level()));
+	mk_row(panel, ROW_TOP, ROW_H, "Display", sub, false, show_bright, NULL,
 	       &pct_lbl);
 
 	/*

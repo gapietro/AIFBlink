@@ -33,8 +33,16 @@ struct swatch { const char *name; unsigned rgb; };
 
 /* Kept in step with firmware/src/usage_view.c by the check at the end. The
  * background, the quiet text and the grey are the AI Foundry palette
- * (2026-10-14); the severity ramp is the one this file was written for. */
-static const struct swatch pal[] = {
+ * (2026-10-14); the severity ramp is the one this file was written for.
+ *
+ * TWO palettes since the contrast mode (firmware/src/theme.h): a themed
+ * colour is THEMED(normal, high) in the source, and every rule below is run
+ * against each column. The severity ramp is not themed, so it appears in
+ * both with the same values -- and is checked against both backgrounds,
+ * which is the half of it that changes. */
+struct palette { const char *name; const struct swatch *sw; };
+
+static const struct swatch pal_normal[] = {
 	{ "COL_BG",      0x011824 },
 	{ "COL_TEXT",    0xE6E8EB },
 	{ "COL_DIM",     0x9DB3C1 },
@@ -44,7 +52,22 @@ static const struct swatch pal[] = {
 	{ "COL_GREY",    0x7D93A6 },
 	{ "COL_OTHER",   0x4387DF },
 };
-#define N (int)(sizeof(pal) / sizeof(pal[0]))
+static const struct swatch pal_high[] = {
+	{ "COL_BG",      0x000A10 },
+	{ "COL_TEXT",    0xFFFFFF },
+	{ "COL_DIM",     0xC9D6DE },
+	{ "COL_GREEN",  0x0DA243 },
+	{ "COL_AMBER",  0xBA8107 },
+	{ "COL_RED",  0xFF1900 },
+	{ "COL_GREY",    0x93A8B8 },
+	{ "COL_OTHER",   0x4387DF },
+};
+#define N (int)(sizeof(pal_normal) / sizeof(pal_normal[0]))
+_Static_assert(sizeof(pal_normal) == sizeof(pal_high),
+	       "both palettes name the same colours");
+
+/* The palette under test; main() runs every check once per palette. */
+static const struct swatch *pal = pal_normal;
 
 static double chan(unsigned c)
 {
@@ -158,7 +181,25 @@ static int source_agrees(const char *name, unsigned rgb)
 	return 0;
 }
 
+static void check_palette(void);
+
 int main(void)
+{
+	static const struct palette both[] = {
+		{ "normal", pal_normal }, { "high contrast", pal_high },
+	};
+
+	for (unsigned p = 0; p < sizeof(both) / sizeof(both[0]); p++) {
+		printf("-- %s palette --\n", both[p].name);
+		pal = both[p].sw;
+		check_palette();
+	}
+	printf(failures ? "\n%d FAILED\n" : "\nall contrast checks passed\n",
+	       failures);
+	return failures ? 1 : 0;
+}
+
+static void check_palette(void)
 {
 	unsigned bg = by_name("COL_BG");
 	char msg[128];
@@ -305,7 +346,4 @@ int main(void)
 		printf("SKIP: usage_view.c not reachable from here\n");
 	}
 
-	printf(failures ? "\n%d FAILED\n" : "\nall contrast checks passed\n",
-	       failures);
-	return failures ? 1 : 0;
 }

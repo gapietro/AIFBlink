@@ -45,6 +45,10 @@ void ui_settings_notice_dismiss(void);
  */
 void ui_settings_drop_pending(void);
 
+/* After a contrast restart (theme.h): open the panel on its Display screen
+ * once the gauges have data, so the person lands where they pressed. */
+void ui_settings_reopen_display(void);
+
 void ui_settings_service(void (*pump)(void));
 
 /*

@@ -319,6 +319,8 @@ firmware slots and the settings partition are exactly where they were.
 Edition and logo are independent - a company unit is still a Claude or a
 Codex one.
 
+**Display settings.** Settings -> Display holds the brightness (five levels) and the contrast: **Normal** is the AIF navy, **High** a near-black ground with pure white text, for a panel that looks washed out. Changing contrast restarts the board into the new colours -- a couple of seconds, a brief reconnect to the app -- and puts you back on the Display screen. Contrast is done with the colours the board draws, not by re-tuning the panel's controller: that was tried, and on these boards it garbled the screen.
+
 **This fork's units are the AI Foundry team's.** The gauge, settings and setup screens use the AIF logo's navy and green, and the header reads AIF BLINK; both ship with the firmware, so every board on this feed gets them with an update. The startup screen is a company logo built from the AIF mark by `tools/make_aif_startup.py`, and like any company logo it goes on with the cable, once per board:
 
 ```bash

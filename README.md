@@ -125,7 +125,7 @@ Needs Claude Code 2.1.100 or newer. The installer changes one file, `~/.claude/s
 ~/.blink/bin/blink status
 ```
 
-That one command says whether the service is running, whether Claude Code and Codex are being read, and how old the numbers are. If the panel is dark or wrong, unplug the board and plug it back in first - the app finds it again on its own. If that does not fix it, email **support@blink-buddy.com** with the output of `blink status` and the last lines of `~/.blink/bridge.log`; nothing in either is a secret.
+That one command says whether the service is running, whether Claude Code and Codex are being read, and how old the numbers are. If the panel is dark or wrong, unplug the board and plug it back in first - the app finds it again on its own. If that does not fix it, open an issue at **[github.com/gapietro/AIFBlink/issues](https://github.com/gapietro/AIFBlink/issues)** with the output of `blink status` and the last lines of `~/.blink/bridge.log`; nothing in either is a secret.
 
 **If the board says the app is old.** The board and the app ship together, so normally they match. If they have come apart - the board on a later version than the computer - the board's own update screen cannot fix it, because the half that is behind is the half it cannot reach. `blink status` says so and names the cure:
 

@@ -348,7 +348,7 @@ in `FAILED` rather than a boxed unit. Run it locally with
 
 You only need this to put firmware on a board yourself (after that, it updates over the air). It uses the [Zephyr](https://zephyrproject.org/) toolchain.
 
-The default build is what ships: USB only, with no radio, no sign-in and no token store compiled in. The on-device Wi-Fi path is still here and still builds - add `-DEXTRA_CONF_FILE=wifi.conf` to the command below - it is simply not in anything released.
+There is one build, and it is what ships: USB only, with no radio, no sign-in and no token store.
 
 ```bash
 . tools/lib_zephyr.sh && blink_zephyr_activate   # finds the workspace itself
@@ -417,7 +417,7 @@ The things that were open before the first release, and how each was settled.
 - **Only you can update your device.** Firmware must be signed with your private key (kept off this repo, at `~/.blink/…`); the bootloader rejects anything else. App updates must be signed with a second key of yours, or the app will not install them. The public repo only lets people read and download the firmware, which holds no secrets.
 - **The device holds no credential.** It never signs in and never talks to Anthropic. The figures come from the Claude Code on your own machine, which has already worked them out, and reach the board over the cable. There is no token on the device to leak, and nothing to revoke if you sell or lend it.
 - **The setup touches one file.** `~/.claude/settings.json`: its `statusLine.command`, and a hook entry per lifecycle event - see "What the installer changes" above for exactly what is written and what is kept. All of it is reversible with one command.
-- The on-device Wi-Fi and sign-in path still exists in this repository, behind `CONFIG_BLINK_WIFI_MODE`, but is **not built into shipped firmware** - the release script refuses to publish an image containing it.
+- An on-device Wi-Fi and sign-in path once lived in this repository, compiled out of every release. It was removed on 2026-10-15: the board signed itself in to Anthropic as Claude Code, which [Anthropic's terms](https://code.claude.com/docs/en/legal-and-compliance) do not allow, and it had stopped compiling. The release script still refuses an image carrying its strings, so it cannot return unnoticed.
 
 ## The status dot
 

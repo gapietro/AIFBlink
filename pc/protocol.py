@@ -441,10 +441,11 @@ The firmware reads this field: proto.c's "usage" handler calls
     # Nothing has ever read them. proto.c's usage handler takes
     # session_resets_in_s and weekly_resets_in_s and says why in its own
     # comment: "the board has no wall clock when tethered over USB, so the
-    # daemon does the subtraction". usage_parse.c does read a "resets_at", but
-    # that is the standalone WiFi path parsing the API's own JSON body, not
-    # this message. A repo-wide search for a reader finds one hit, and it is a
-    # host test using the name as a sample key for the generic string parser.
+    # daemon does the subtraction". The standalone WiFi mode's usage_parse.c
+    # read a "resets_at" from the API's own JSON body, never from this message,
+    # and went with that mode on 2026-10-15. A repo-wide search for a reader
+    # finds one hit, and it is a host test using the name as a sample key for
+    # the generic string parser.
     #
     # They cost about 59 bytes together, on a line that measured 511 of 512.
     # A field no consumer reads is not "kept for readability" -- the docstring's

@@ -140,10 +140,10 @@ KEY="${OTA_SIGNING_KEY:-$HOME/.blink/ota_signing_key_p256.pem}"
 
 BIN="$ROOT/firmware/build-sb/firmware/zephyr/zephyr.signed.bin"
 
-# A release must not carry the on-device network path. CONFIG_BLINK_WIFI_MODE
-# defaults to n, but a default is not a guarantee: a stray EXTRA_CONF_FILE or a
-# sticky build directory flips it silently, and nobody would find out until a
-# customer's board signed itself in to Anthropic as Claude Code.
+# A release must not carry the on-device network path. Its source was removed
+# on 2026-10-15, but a revert, a cherry-pick from upstream or a sticky build
+# directory could bring it back silently, and nobody would find out until a
+# board signed itself in to Anthropic as Claude Code. So the check stays.
 #
 # Checks the ARTIFACT, not only the config, because the artifact is what ships.
 # If the OAuth path were ever linked in, these strings would be in the image.

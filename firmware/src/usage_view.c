@@ -1,8 +1,7 @@
 /*
  * The gauge screen: Session (5h) and Weekly (7d) as arcs, with live countdowns.
  *
- * This is the one sink both data sources feed -- the USB bridge today, direct
- * WiFi fetching later -- so both modes render through identical code.
+ * Everything on it arrives from the daemon over USB, through proto.c.
  */
 #include <zephyr/kernel.h>
 #include <lvgl.h>
@@ -322,38 +321,20 @@ static double last_w_pct = -1;
 static enum usage_status last_status = USAGE_STATUS_DISCONNECTED;
 
 /*
- * Per-model weekly windows -- and the long-press card that picks between
- * them -- exist only in standalone WiFi mode. That mode reads Claude's usage
- * endpoint directly and gets a per-model breakdown with it. The USB path
- * gets its numbers from Claude Code's status line, and that payload carries
- * the two overall windows and nothing else; pc/statusline_source.py sends an
- * empty models list because there is nothing to put in one.
+ * Per-model weekly windows -- and the long-press card that picked between
+ * them -- belonged to the standalone WiFi mode, which read Claude's usage
+ * endpoint directly and got a per-model breakdown with it. It was removed on
+ * 2026-10-15. The USB path gets its numbers from Claude Code's status line,
+ * and that payload carries the two overall windows and nothing else;
+ * pc/statusline_source.py sends an empty models list because there is
+ * nothing to put in one.
  *
- * So on a USB unit the card offered a choice between a real number and a
- * permanent "--%" -- and because the choice is kept in NVS, choosing the
+ * On a USB unit the card had offered a choice between a real number and a
+ * permanent "--%" -- and because the choice was kept in NVS, choosing the
  * empty one stuck across reboots, leaving a gauge reading "--%" for good
- * with no route back that anyone would find. Compiled out rather than
- * disabled: a control that cannot do anything is worse than no control.
+ * with no route back that anyone would find. A control that cannot do
+ * anything is worse than no control.
  */
-#if IS_ENABLED(CONFIG_BLINK_WIFI_MODE)
-#define HAVE_PER_MODEL 1
-
-/* Long-press peek: a card of per-model weekly numbers that STAYS up -- tap
- * a row to point the weekly gauge at that model, tap anywhere else (or wait
- * out the timer) to dismiss. v1 hid it on finger-up, which on this jittery
- * panel meant it vanished before it could be read, let alone used
- * (hardware 2026-07-17). */
-#define PEEK_ROWS 2			/* Claude's windows today: all + fable */
-static lv_obj_t *peek;
-static lv_obj_t *peek_row[PEEK_ROWS];
-static lv_obj_t *peek_row_lbl[PEEK_ROWS];
-static int weekly_sel;			/* 0 all models, 1 fable */
-static int peek_ttl;			/* auto-hide countdown, 0 = idle */
-static int64_t peek_shown_ms;
-static double model_fable = -1;
-#else
-#define HAVE_PER_MODEL 0
-#endif
 
 static void render_weekly(void);
 static void render_age(void);
@@ -361,51 +342,18 @@ static void wordmark_cb(lv_event_t *e);
 /* Defined beside pip_colour(), which it borrows; called from the 1 s tick,
  * which runs earlier in this file. */
 static void toast_hide(void);
-#if HAVE_PER_MODEL
-static void peek_fill(void);
-#endif
 
 void usage_view_set_models(double fable_pct)
 {
-#if !HAVE_PER_MODEL
-	/* Nothing on this build produces a per-model number: the daemon sends
-	 * no such key and proto.c passes its -1 default straight through.
-	 * Kept as a symbol so both data paths still share one header. */
+	/* Nothing produces a per-model number: the daemon sends no such key
+	 * and proto.c passes its -1 default straight through. Kept as a
+	 * symbol because proto.c still calls it. */
 	ARG_UNUSED(fable_pct);
 }
-#else
-	/* Per-model windows reset with the overall weekly, so a zero weekly
-	 * means the fable number is stale too. Derive that from the weekly
-	 * state itself (last_w_pct) rather than a flag set by an earlier call,
-	 * so BOTH ways the weekly can empty are covered: an update reporting
-	 * the reset, AND the local countdown ticking to zero via
-	 * expire_weekly(). fable is a component of the weekly, so weekly 0%
-	 * always implies fable 0%. */
-	if (last_w_pct == 0 && fable_pct >= 0) {
-		fable_pct = 0;
-	}
-	model_fable = fable_pct;
-	if (built) {
-		render_weekly();
-		if (peek && !lv_obj_has_flag(peek, LV_OBJ_FLAG_HIDDEN)) {
-			peek_fill();
-		}
-		/* The near-limit hint is computed in set_status from model_fable,
-		 * but the models event usually lands right AFTER the usage update
-		 * that ran it -- so re-run it here or the Fable warning lags a
-		 * whole poll and is missing on the first frames after a reboot
-		 * (user-reported 2026-07-20). */
-		if (last_status == USAGE_STATUS_OK) {
-			usage_view_set_status(USAGE_STATUS_OK);
-		}
-	}
-}
-#endif /* HAVE_PER_MODEL */
 
-/* One CONNECTING screen for every boot, USB and standalone alike: a segmented
- * bar that fills green as the worker gets through it, current step named
- * below (option D of the mockups, user-picked 2026-07-15; unified across
- * modes per user request 2026-07-16). The mode passes its own step list to
+/* The CONNECTING screen: a segmented bar that fills green as the boot gets
+ * through it, current step named below (option D of the mockups,
+ * user-picked 2026-07-15). The caller passes its step list to
  * usage_view_boot_begin(). */
 #define BOOT_STEPS_MAX 3
 static lv_obj_t *boot_seg[BOOT_STEPS_MAX];
@@ -419,12 +367,13 @@ static const char *const *boot_txt;
 static int boot_n;
 
 /*
- * Bound before the cast, never after. usage_view_update has a second caller
- * besides the serial path: main.c's on-device OAuth client, whose figures come
- * from a bare strtod in usage_parse.c with no range check at all, so nan, inf
- * and 1e300 all arrive here. Converting an out-of-range double to int32_t is
- * undefined behaviour -- the very defect proto.c's num() exists to avoid --
- * and `pct < 0` does not catch nan, because nothing compares true to nan.
+ * Bound before the cast, never after. usage_view_update once had a second
+ * caller besides the serial path: the WiFi mode's OAuth client (removed
+ * 2026-10-15), whose figures came from a bare strtod with no range check at
+ * all, so nan, inf and 1e300 all arrived here. Converting an out-of-range
+ * double to int32_t is undefined behaviour -- the very defect proto.c's num()
+ * exists to avoid -- and `pct < 0` does not catch nan, because nothing
+ * compares true to nan. The bound stays for the next caller.
  */
 #define PCT_DISPLAY_MAX 1000
 
@@ -596,17 +545,6 @@ static void render_countdown(struct gauge *g)
 
 }
 
-#if HAVE_PER_MODEL
-static const char *const sel_name[PEEK_ROWS] = {
-	"WEEKLY 7d", "WEEKLY FABLE",
-};
-static const char *const sel_label[PEEK_ROWS] = { "All models", "Fable" };
-
-static double sel_pct(int sel)
-{
-	return sel == 1 ? model_fable : last_w_pct;
-}
-#endif
 
 /*
  * The right-hand gauge on a page with a plan.
@@ -659,27 +597,20 @@ static void render_captions(void)
 	}
 }
 
-/* The weekly arc shows whichever source the peek card selected. The
- * countdown stays the overall weekly reset -- the per-model windows reset
- * with it. */
+/* The weekly arc shows the overall weekly window, and the countdown is its
+ * reset. */
 static void render_weekly(void)
 {
 	if (page_plan(cur_page) != PAGE_PLAN_WINDOWS) {
 		render_plan_weekly();
 		return;
 	}
-#if HAVE_PER_MODEL
-	double pct = sel_pct(weekly_sel);
-
-	lv_label_set_text(weekly.name, sel_name[weekly_sel]);
-#else
 	/* One window, so the gauge never needs to say which one it is showing
 	 * -- but it still says it, because "WEEKLY 7d" is the honest name for
 	 * the number under it. */
 	double pct = last_w_pct;
 
 	lv_label_set_text(weekly.name, "WEEKLY 7d");
-#endif
 	if (pct < 0) {
 		lv_label_set_text(weekly.pct, "--%");
 		lv_arc_set_value(weekly.arc, 0);
@@ -693,64 +624,6 @@ static void render_weekly(void)
 	lv_arc_set_value(weekly.arc, arc_value(pct));
 	lv_obj_set_style_arc_color(weekly.arc, severity(pct), LV_PART_INDICATOR);
 }
-
-#if HAVE_PER_MODEL
-static void peek_fill(void)
-{
-	for (int i = 0; i < PEEK_ROWS; i++) {
-		double pct = sel_pct(i);
-		char val[8] = "--";
-		char buf[24];
-
-		if (pct >= 0) {
-			snprintf(val, sizeof(val), "%d%%", (int)pct_int(pct));
-		}
-		snprintf(buf, sizeof(buf), "%s  %s", sel_label[i], val);
-		lv_label_set_text(peek_row_lbl[i], buf);
-		/* The selected row wears green, like a done checklist step. */
-		lv_obj_set_style_bg_color(peek_row[i],
-			i == weekly_sel ? COL_GREEN : COL_TRACK, 0);
-		lv_obj_set_style_text_color(peek_row_lbl[i],
-			i == weekly_sel ? COL_GREEN_INK : COL_TEXT, 0);
-	}
-}
-
-static void peek_hide(void)
-{
-	peek_ttl = 0;
-	lv_obj_add_flag(peek, LV_OBJ_FLAG_HIDDEN);
-}
-
-static void peek_row_cb(lv_event_t *e)
-{
-	weekly_sel = (int)(intptr_t)lv_event_get_user_data(e);
-	cfg_set_weekly_sel((uint8_t)weekly_sel);	/* survives reboots */
-	render_weekly();
-	peek_hide();
-}
-
-/* LONG_PRESSED on the screen. */
-static void peek_open_cb(lv_event_t *e)
-{
-	ARG_UNUSED(e);
-	peek_fill();
-	lv_obj_clear_flag(peek, LV_OBJ_FLAG_HIDDEN);
-	peek_ttl = 8;
-	peek_shown_ms = k_uptime_get();
-}
-
-/* CLICKED on the screen: dismiss -- but the release of the opening
- * long-press itself arrives as a click, so only later taps count. */
-static void peek_scrim_cb(lv_event_t *e)
-{
-	ARG_UNUSED(e);
-	if (peek && !lv_obj_has_flag(peek, LV_OBJ_FLAG_HIDDEN) &&
-	    k_uptime_get() - peek_shown_ms > 600) {
-		peek_hide();
-	}
-}
-#endif /* HAVE_PER_MODEL */
-
 
 static lv_obj_t *gauge_scr;
 
@@ -799,10 +672,6 @@ void usage_view_deinit(void)
 	 * whatever was true before the user went into settings.
 	 */
 	toast_have_prev = false;
-#if HAVE_PER_MODEL
-	peek = NULL;
-	peek_ttl = 0;
-#endif
 	if (gauge_scr) {
 		lv_obj_del(gauge_scr);
 		gauge_scr = NULL;
@@ -1027,55 +896,6 @@ void usage_view_init(void)
 	lv_obj_set_style_text_color(chev, COL_GREY, 0);
 	lv_obj_align(chev, LV_ALIGN_LEFT_MID, 3, 0);
 
-#if HAVE_PER_MODEL
-	/* The peek card, hidden until a long press. Created before the
-	 * takeover overlay, which therefore keeps it unreachable while there
-	 * is no data to peek at. */
-	peek = lv_obj_create(scr);
-	lv_obj_set_size(peek, 240, 152);
-	lv_obj_set_style_radius(peek, 12, 0);
-	lv_obj_set_style_bg_color(peek, COL_PANEL, 0);
-	lv_obj_set_style_bg_opa(peek, LV_OPA_COVER, 0);
-	lv_obj_set_style_border_color(peek, COL_TRACK, 0);
-	lv_obj_set_style_border_width(peek, 1, 0);
-	lv_obj_set_style_pad_all(peek, 0, 0);
-	lv_obj_clear_flag(peek, LV_OBJ_FLAG_SCROLLABLE);
-	lv_obj_clear_flag(peek, LV_OBJ_FLAG_CLICKABLE);
-	lv_obj_center(peek);
-	lv_obj_add_flag(peek, LV_OBJ_FLAG_HIDDEN);
-
-	lv_obj_t *pt = lv_label_create(peek);
-
-	lv_label_set_text(pt, "WEEKLY GAUGE SHOWS");
-	lv_obj_set_style_text_color(pt, COL_DIM, 0);
-	lv_obj_set_style_text_letter_space(pt, 1, 0);
-	lv_obj_align(pt, LV_ALIGN_TOP_MID, 0, 12);
-
-	/* 46 px rows, nearly card-wide: the 30 px originals were a miss-tap
-	 * lottery on this panel (user feedback 2026-07-17). */
-	for (int i = 0; i < PEEK_ROWS; i++) {
-		peek_row[i] = lv_btn_create(peek);
-		lv_obj_set_size(peek_row[i], 208, 46);
-		lv_obj_set_style_shadow_width(peek_row[i], 0, 0);
-		lv_obj_align(peek_row[i], LV_ALIGN_TOP_MID, 0, 40 + i * 54);
-		lv_obj_add_event_cb(peek_row[i], peek_row_cb,
-				    LV_EVENT_CLICKED, (void *)(intptr_t)i);
-
-		peek_row_lbl[i] = lv_label_create(peek_row[i]);
-		lv_label_set_text(peek_row_lbl[i], "");
-		lv_obj_center(peek_row_lbl[i]);
-	}
-
-	lv_obj_add_event_cb(scr, peek_open_cb, LV_EVENT_LONG_PRESSED, NULL);
-	lv_obj_add_event_cb(scr, peek_scrim_cb, LV_EVENT_CLICKED, NULL);
-
-	/* The peek-card choice from last boot; render so the gauge's name
-	 * says which window it shows from the very first frame. */
-	weekly_sel = cfg_get_weekly_sel();
-	if (weekly_sel >= PEEK_ROWS) {
-		weekly_sel = 0;		/* stale NVS from an older layout */
-	}
-#endif /* HAVE_PER_MODEL */
 	render_weekly();
 
 	/*
@@ -1881,17 +1701,7 @@ static void expire_weekly(void)
 	weekly.resets_in_s = -1;
 	render_countdown(&weekly);
 	last_w_pct = 0;
-#if HAVE_PER_MODEL
-	if (model_fable >= 0) {
-		model_fable = 0;	/* per-model windows reset with the weekly */
-	}
-#endif
 	render_weekly();
-#if HAVE_PER_MODEL
-	if (peek && !lv_obj_has_flag(peek, LV_OBJ_FLAG_HIDDEN)) {
-		peek_fill();
-	}
-#endif
 }
 
 void usage_view_tick_1s(void)
@@ -1980,11 +1790,6 @@ void usage_view_tick_1s(void)
 		toast_hide();
 	}
 
-#if HAVE_PER_MODEL
-	if (peek_ttl > 0 && --peek_ttl == 0) {
-		peek_hide();
-	}
-#endif
 }
 
 /*
@@ -2810,16 +2615,6 @@ void usage_view_set_status(enum usage_status status)
 		} else if (last_w_pct >= 95.0) {
 			text = "Weekly almost used up";
 			tc = COL_RED;
-#if HAVE_PER_MODEL
-		} else if (model_fable >= 99.5) {
-			text = "Fable weekly used up";
-			tc = COL_RED;
-		} else if (model_fable >= 95.0) {
-			/* Fable's window is a real limit of its own; it can
-			 * run dry while the overall weekly still looks calm. */
-			text = "Fable weekly almost used up";
-			tc = COL_RED;
-#endif
 		} else {
 			/*
 			 * Data health has nothing to say, so the line reports

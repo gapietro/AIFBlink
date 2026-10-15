@@ -195,7 +195,11 @@ def test_a_damaged_file_starts_a_fresh_collection(tmp_path):
 
 
 def test_the_default_file_is_resolved_late(tmp_path, monkeypatch):
+    # Both, as tests/conftest.py does: expanduser("~") reads USERPROFILE on
+    # Windows, and with only HOME moved this test failed on the Windows CI
+    # runner (2026-10-15) while passing on macOS and Linux.
     monkeypatch.setenv("HOME", str(tmp_path / "elsewhere"))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path / "elsewhere"))
     assert badges.state_path().startswith(str(tmp_path / "elsewhere"))
 
 

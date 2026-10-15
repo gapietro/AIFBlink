@@ -50,6 +50,25 @@ else
 		echo "       BLINK_SKIP_FLEET=1 releases without it." >&2
 		exit 1; }
 fi
+# The fleet cannot tap a screen, and 1.7.0 passed it with a crash on the first
+# Settings tap -- the LVGL pool ran dry drawing the panel. The board prints
+# what each screen costs ("[mem] lvgl pool ...") and the daemon copies that
+# into bridge.log, so pc/screen_gate.py reads it and refuses unless THIS
+# version was seen with Settings and Badges open and pool headroom to spare.
+# Run it after the fleet: open both screens on the board, then release.
+#
+# BLINK_LOG names the log if the board's daemon is not this user's install.
+if [ "${BLINK_SKIP_SCREENS:-}" = "1" ]; then
+	echo "WARNING: BLINK_SKIP_SCREENS=1 -- nobody has shown that $TAG can" >&2
+	echo "         open Settings or Badges without running out of memory." >&2
+else
+	PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}" "$PY" -m pc.screen_gate \
+		"$VER" "${BLINK_LOG:-$HOME/.blink/bridge.log}" \
+		"$ROOT/firmware/prj.conf" || {
+		echo "FATAL: the screen gate refused $TAG for the reason above." >&2
+		echo "       BLINK_SKIP_SCREENS=1 releases without it." >&2
+		exit 1; }
+fi
 # The tag has to exist on the remote BEFORE the draft is created.
 #
 # A draft release does not create its git tag -- GitHub only writes the tag

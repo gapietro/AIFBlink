@@ -181,11 +181,18 @@ class TestFlash(unittest.TestCase):
         self.assertEqual(flashed, [])
 
     def test_size_mismatch_is_never_written(self):
-        """slot0 has no auto-revert, so a bad image must not reach it."""
+        """slot0 has no auto-revert, so a bad image must not reach it.
+
+        The reason is asserted, not only the message type. This blob also
+        fails the hash, so without it the size guard could be deleted with
+        the test still green -- the sha256 check would send an ota_error of
+        its own (mutation survey, 2026-09-05).
+        """
         b, sent, flashed = bridge(manifest=self.M, firmware=b"much longer")
         b.on_message({"t": "ota_query", "cur": "0.4.8"})
         b.on_message({"t": "ota_flash"})
         self.assertEqual(types(sent), ["ota_avail", "ota_error"])
+        self.assertEqual(sent[-1]["why"], "size mismatch")
         self.assertEqual(flashed, [])
 
     def test_sha_mismatch_is_never_written(self):

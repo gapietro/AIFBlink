@@ -1,4 +1,6 @@
 import json
+import pathlib
+import re
 import unittest
 
 from pc import protocol
@@ -101,6 +103,47 @@ class WireBudget(unittest.TestCase):
         raw, why = protocol.encode_checked(fat)
         self.assertIsNone(raw)
         self.assertIn("line limit", why)
+
+    def test_the_limit_is_the_boards_to_the_byte(self):
+        """Exactly MAX_LINE_BYTES is sent; one byte more is refused.
+
+        Derived from the board, not from this module's own comparison:
+        drain_rx() in proto.c keeps `line[LINE_MAX]` and stores a byte only
+        while line_len < LINE_MAX - 1, so 511 bytes of JSON fit and the 512th
+        starts discarding. The '\\n' encode() appends is consumed as the
+        terminator, never stored -- 512 bytes on the wire get through, 513
+        are dropped whole and the panel stops updating.
+
+        The mutation survey of 2026-09-05 found `>` in encode_checked could
+        become `>=` with every test green: nothing encoded a line of exactly
+        this length, at the one boundary where a byte freezes the panel.
+        """
+        def line_of(n):
+            msg = {"t": "usage", "pad": ""}
+            msg["pad"] = "x" * (n - len(protocol.encode(msg)))
+            return msg
+
+        raw, why = protocol.encode_checked(line_of(protocol.MAX_LINE_BYTES))
+        self.assertIsNone(why)
+        self.assertEqual(len(raw), protocol.MAX_LINE_BYTES)
+
+        raw, why = protocol.encode_checked(
+            line_of(protocol.MAX_LINE_BYTES + 1))
+        self.assertIsNone(raw)
+        self.assertIn("line limit", why)
+
+    def test_the_budget_is_the_firmwares_line_buffer(self):
+        """MAX_LINE_BYTES mirrors proto.c's LINE_MAX, read from the source.
+
+        Two numbers in two languages that must agree, and nothing tied them:
+        shrinking the board's buffer would leave the daemon sending lines the
+        board drops, with every Python test still green.
+        """
+        src = (pathlib.Path(__file__).resolve().parents[2] / "firmware" / "src"
+               / "proto.c").read_text(encoding="utf-8")
+        m = re.search(r"^#define LINE_MAX (\d+)$", src, re.M)
+        self.assertIsNotNone(m, "LINE_MAX is no longer a plain #define")
+        self.assertEqual(int(m.group(1)), protocol.MAX_LINE_BYTES)
 
 
 class AdditiveFields(unittest.TestCase):

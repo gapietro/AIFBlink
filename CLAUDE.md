@@ -138,6 +138,9 @@ how it was found. No trailers (see the top of this file).
 - `docs/README-full.md` — the long user-facing document, including build and
   flash.
 - `docs/windows-check.md` — the ten-minute manual pass, once per release.
+- `docs/team-rollout.md` — burning a team board, a teammate's install, and
+  the release order (open Settings and Badges first: `pc/screen_gate.py`
+  refuses a version the board never showed them on).
 - `docs/fleet-testing.md` and `tools/fleet/fleet.toml` — the desks a release
   is proved on. This fork has one (this Mac, a Claude board); upstream's
   three are unreachable from here and are mentioned only as history.
